@@ -1,0 +1,21 @@
+# Binaries
+/adotop
+/adotop.exe
+/dist/
+/bin/
+
+# Go build/test artifacts
+*.exe
+*.test
+*.out
+coverage.txt
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local env
+.env
+.env.local
