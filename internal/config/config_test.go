@@ -3,17 +3,17 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 )
 
+func setHome(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir) // os.UserHomeDir reads this on Windows
+}
+
 func TestLoadMissingReturnsDefaults(t *testing.T) {
-	dir := t.TempDir()
-	if runtime.GOOS == "windows" {
-		t.Setenv("APPDATA", dir)
-	} else {
-		t.Setenv("XDG_CONFIG_HOME", dir)
-	}
+	setHome(t, t.TempDir())
 	cfg, _, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -25,12 +25,8 @@ func TestLoadMissingReturnsDefaults(t *testing.T) {
 
 func TestLoadParses(t *testing.T) {
 	dir := t.TempDir()
-	if runtime.GOOS == "windows" {
-		t.Setenv("APPDATA", dir)
-	} else {
-		t.Setenv("XDG_CONFIG_HOME", dir)
-	}
-	p := filepath.Join(dir, "adotop", "config.toml")
+	setHome(t, dir)
+	p := filepath.Join(dir, ".adotop", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}

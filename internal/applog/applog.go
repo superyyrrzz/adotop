@@ -8,32 +8,15 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
 )
 
-// Dir returns the platform log directory.
+// Dir returns the log directory: ~/.adotop/logs on every OS.
 func Dir() (string, error) {
-	if runtime.GOOS == "windows" {
-		appdata := os.Getenv("LOCALAPPDATA")
-		if appdata == "" {
-			appdata = os.Getenv("APPDATA")
-		}
-		if appdata == "" {
-			return "", errors.New("LOCALAPPDATA/APPDATA not set")
-		}
-		return filepath.Join(appdata, "adotop", "logs"), nil
-	}
-	if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
-		return filepath.Join(xdg, "adotop"), nil
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	if runtime.GOOS == "darwin" {
-		return filepath.Join(home, "Library", "Logs", "adotop"), nil
-	}
-	return filepath.Join(home, ".local", "state", "adotop"), nil
+	return filepath.Join(home, ".adotop", "logs"), nil
 }
 
 // Init opens (or creates) the log file and installs a slog default logger writing to it.

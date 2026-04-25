@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -37,23 +36,13 @@ func Default() Config {
 	}
 }
 
-// Path returns the platform-appropriate config file path.
+// Path returns the config file path. Same on every OS: ~/.adotop/config.toml.
 func Path() (string, error) {
-	if runtime.GOOS == "windows" {
-		appdata := os.Getenv("APPDATA")
-		if appdata == "" {
-			return "", errors.New("APPDATA not set")
-		}
-		return filepath.Join(appdata, "adotop", "config.toml"), nil
-	}
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "adotop", "config.toml"), nil
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "adotop", "config.toml"), nil
+	return filepath.Join(home, ".adotop", "config.toml"), nil
 }
 
 // Load reads the config file. Missing file returns defaults.

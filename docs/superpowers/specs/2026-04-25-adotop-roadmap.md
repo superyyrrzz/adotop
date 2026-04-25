@@ -54,7 +54,7 @@ Each stage ends with a tagged release. Stages 1–5 each get their own design sp
 **Deliverables:**
 - Project scaffold: `cmd/adotop`, `internal/ado` (API client), `internal/ui` (Bubble Tea app), `internal/config`
 - Auth: shell out to `az account get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798` to get an ADO bearer token; cache in memory; refresh on 401
-- Config file at `~/.config/adotop/config.toml` (and `%APPDATA%\adotop\config.toml` on Windows): default org, default project, refresh interval, key bindings overrides
+- Config file at `~/.adotop/config.toml` (same path on Windows, macOS, Linux): default org, default project, refresh interval, key bindings overrides
 - API client with: typed request/response, retries with backoff, rate-limit handling, context cancellation
 - App shell: header (current org/project/user), footer (keybinding hints), main area placeholder, `?` for help, `q` to quit
 - Logging to a file (not stdout — would corrupt TUI)

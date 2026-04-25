@@ -13,3 +13,15 @@ go build ./cmd/adotop
 ## Auth
 
 Uses your existing `az` CLI login. Run `az login` once, then `adotop` will obtain ADO bearer tokens on demand.
+
+## Config
+
+`~/.adotop/config.toml` — same path on Windows, macOS, Linux. Example:
+
+```toml
+org = "ceapex"
+project = "Engineering"
+refresh_interval = "60s"
+```
+
+Logs go to `~/.adotop/logs/adotop.log`.
