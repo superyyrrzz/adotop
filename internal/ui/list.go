@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/renzeyu/adotop/internal/ado"
 )
@@ -197,12 +198,12 @@ func (m ListModel) View() string {
 		start, end := m.window(len(rows))
 		for i := start; i < end; i++ {
 			p := rows[i]
-			line := fmt.Sprintf("#%-5d %s %s %s → %s   %s",
-				p.ID,
-				padRunes(truncate(p.Title, 40), 40),
-				padRunes(truncate(p.Author, 12), 12),
-				padRunes(truncate(p.SourceBranch, 20), 20),
-				padRunes(truncate(p.TargetBranch, 16), 16),
+			line := fmt.Sprintf("%s %s %s %s → %s   %s",
+				padCols(fmt.Sprintf("#%d", p.ID), 8),
+				truncCols(p.Title, 40),
+				truncCols(p.Author, 14),
+				truncCols(p.SourceBranch, 22),
+				truncCols(p.TargetBranch, 18),
 				age(p.CreatedAt))
 			if p.Draft {
 				line += "  [DRAFT]"
@@ -259,9 +260,32 @@ func truncate(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
-// padRunes right-pads s with spaces to reach width visible columns,
-// counting runes rather than bytes so multibyte characters don't
-// shift downstream columns left.
+// truncCols truncates s so its display width fits in cols (appending "…"
+// when shortened) and right-pads with spaces to exactly cols columns.
+func truncCols(s string, cols int) string {
+	if cols <= 0 {
+		return ""
+	}
+	w := runewidth.StringWidth(s)
+	if w <= cols {
+		return s + strings.Repeat(" ", cols-w)
+	}
+	out := runewidth.Truncate(s, cols-1, "") + "…"
+	pad := cols - runewidth.StringWidth(out)
+	if pad > 0 {
+		out += strings.Repeat(" ", pad)
+	}
+	return out
+}
+
+// padCols right-pads s with spaces to exactly cols display columns,
+// truncating with "…" if it overflows. Use for fields where overflow
+// (long PR IDs, etc.) must not push downstream columns right.
+func padCols(s string, cols int) string {
+	return truncCols(s, cols)
+}
+
+// padRunes is kept for callers that want simple rune-count padding.
 func padRunes(s string, width int) string {
 	n := len([]rune(s))
 	if n >= width {

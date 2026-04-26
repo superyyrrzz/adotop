@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mattn/go-runewidth"
 	"github.com/renzeyu/adotop/internal/ado"
 )
 
@@ -113,6 +114,64 @@ func TestListAgeColumnAlignsAcrossVaryingBranchLengths(t *testing.T) {
 	}
 	if col1 != col2 {
 		t.Fatalf("age column not aligned across varying branch lengths: 2h@col%d 3h@col%d\n%s", col1, col2, out)
+	}
+}
+
+func TestListAllColumnsAlignAcrossVaryingInputs(t *testing.T) {
+	now := time.Now()
+	prs := []ado.PRSummary{
+		{ID: 7, Title: "tiny", Author: "a", SourceBranch: "f", TargetBranch: "main", CreatedAt: now.Add(-2 * time.Hour)},
+		{ID: 1234567, Title: strings.Repeat("x", 60), Author: "Some Long Author Name", SourceBranch: "users/x/very-long-feature-branch", TargetBranch: "release/2026.05", CreatedAt: now.Add(-3 * 24 * time.Hour)},
+		{ID: 999, Title: "中文标题混合 ascii", Author: "李雷", SourceBranch: "feat/中文", TargetBranch: "main", CreatedAt: now.Add(-30 * time.Second)},
+	}
+	m := NewList(DefaultKeys())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 250, Height: 40})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: prs})
+
+	out := m.View()
+	rows := []string{}
+	for _, line := range strings.Split(out, "\n") {
+		trim := strings.TrimLeft(line, " ")
+		if strings.HasPrefix(trim, "#") {
+			rows = append(rows, line)
+		}
+	}
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 PR rows, got %d:\n%s", len(rows), out)
+	}
+
+	runeCol := func(line, sub string) int {
+		i := strings.Index(line, sub)
+		if i < 0 {
+			return -1
+		}
+		return runewidth.StringWidth(line[:i])
+	}
+	type colCheck struct {
+		name    string
+		needles []string // one per row
+	}
+	checks := []colCheck{
+		{"title", []string{"tiny", "xxxx", "中文标题"}},
+		{"author", []string{"a   ", "Some Long", "李雷"}},
+		{"source", []string{"f   ", "users/x", "feat/中文"}},
+		{"target", []string{"main ", "release", "main "}},
+		{"age", []string{"2h", "3d", "now"}},
+	}
+	for _, ch := range checks {
+		var first int = -1
+		for r, needle := range ch.needles {
+			c := runeCol(rows[r], needle)
+			if c < 0 {
+				t.Fatalf("col %s: needle %q not found in row %d:\n%s", ch.name, needle, r, rows[r])
+			}
+			if first < 0 {
+				first = c
+			} else if c != first {
+				t.Fatalf("col %s misaligned: row 0 col=%d, row %d col=%d (needle %q)\nrows:\n%s\n%s\n%s",
+					ch.name, first, r, c, needle, rows[0], rows[1], rows[2])
+			}
+		}
 	}
 }
 
