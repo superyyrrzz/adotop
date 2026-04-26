@@ -46,6 +46,39 @@ func TestListFilterNarrowsRows(t *testing.T) {
 	}
 }
 
+func TestListColumnsAlignWithEllipsizedTitle(t *testing.T) {
+	m := NewList(DefaultKeys())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: []ado.PRSummary{
+		{ID: 1, Title: strings.Repeat("a", 60), Author: "alice", SourceBranch: "f", TargetBranch: "main"},
+		{ID: 2, Title: "short", Author: "bob", SourceBranch: "f", TargetBranch: "main"},
+	}})
+	out := m.View()
+	// Find the visual column (rune count) of the author marker on each row.
+	runeIndex := func(line, sub string) int {
+		i := strings.Index(line, sub)
+		if i < 0 {
+			return -1
+		}
+		return len([]rune(line[:i]))
+	}
+	var col1, col2 int = -1, -1
+	for _, line := range strings.Split(out, "\n") {
+		if c := runeIndex(line, "alice"); c >= 0 {
+			col1 = c
+		}
+		if c := runeIndex(line, "bob"); c >= 0 {
+			col2 = c
+		}
+	}
+	if col1 < 0 || col2 < 0 {
+		t.Fatalf("could not locate author columns:\n%s", out)
+	}
+	if col1 != col2 {
+		t.Fatalf("author columns not aligned: alice@col%d bob@col%d\n%s", col1, col2, out)
+	}
+}
+
 func TestListNextTabEmitsLoad(t *testing.T) {
 	m := NewList(DefaultKeys())
 	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})

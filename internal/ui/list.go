@@ -197,8 +197,8 @@ func (m ListModel) View() string {
 		start, end := m.window(len(rows))
 		for i := start; i < end; i++ {
 			p := rows[i]
-			line := fmt.Sprintf("#%-5d %-40s %-12s %s → %s   %s",
-				p.ID, truncate(p.Title, 40), truncate(p.Author, 12),
+			line := fmt.Sprintf("#%-5d %s %s %s → %s   %s",
+				p.ID, padRunes(truncate(p.Title, 40), 40), padRunes(truncate(p.Author, 12), 12),
 				p.SourceBranch, p.TargetBranch, age(p.CreatedAt))
 			if p.Draft {
 				line += "  [DRAFT]"
@@ -248,10 +248,22 @@ func voteGlyphs(rs []ado.ReviewerVote) string {
 }
 
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
-	return s[:n-1] + "…"
+	return string(r[:n-1]) + "…"
+}
+
+// padRunes right-pads s with spaces to reach width visible columns,
+// counting runes rather than bytes so multibyte characters don't
+// shift downstream columns left.
+func padRunes(s string, width int) string {
+	n := len([]rune(s))
+	if n >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-n)
 }
 
 func age(t time.Time) string {
