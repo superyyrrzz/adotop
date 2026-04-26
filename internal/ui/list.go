@@ -204,7 +204,7 @@ func (m ListModel) View() string {
 				truncCols(p.Author, 14),
 				truncCols(p.SourceBranch, 22),
 				truncCols(p.TargetBranch, 18),
-				age(p.CreatedAt))
+				padCols(age(p.CreatedAt), 6))
 			if p.Draft {
 				line += "  [DRAFT]"
 			}

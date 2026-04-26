@@ -175,6 +175,39 @@ func TestListAllColumnsAlignAcrossVaryingInputs(t *testing.T) {
 	}
 }
 
+func TestListDraftBadgeAlignsAcrossAges(t *testing.T) {
+	now := time.Now()
+	m := NewList(DefaultKeys())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 250, Height: 40})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: []ado.PRSummary{
+		{ID: 1, Title: "fresh", Author: "a", SourceBranch: "f", TargetBranch: "main", CreatedAt: now.Add(-30 * time.Second), Draft: true},
+		{ID: 2, Title: "old", Author: "b", SourceBranch: "f", TargetBranch: "main", CreatedAt: now.Add(-9999 * 24 * time.Hour), Draft: true},
+	}})
+	out := m.View()
+	col := func(line, sub string) int {
+		i := strings.Index(line, sub)
+		if i < 0 {
+			return -1
+		}
+		return runewidth.StringWidth(line[:i])
+	}
+	var c1, c2 int = -1, -1
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "fresh") {
+			c1 = col(line, "[DRAFT]")
+		}
+		if strings.Contains(line, "old") {
+			c2 = col(line, "[DRAFT]")
+		}
+	}
+	if c1 < 0 || c2 < 0 {
+		t.Fatalf("could not locate DRAFT badge: c1=%d c2=%d\n%s", c1, c2, out)
+	}
+	if c1 != c2 {
+		t.Fatalf("[DRAFT] not aligned across age widths: fresh@col%d old@col%d\n%s", c1, c2, out)
+	}
+}
+
 func TestListNextTabEmitsLoad(t *testing.T) {
 	m := NewList(DefaultKeys())
 	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
