@@ -89,7 +89,32 @@ func TestListPullRequestsCreatedTab(t *testing.T) {
 	}
 }
 
-func TestListPullRequestsReviewRequestedFiltersClientSide(t *testing.T) {
+func TestListPullRequestsAssignedFiltersUnvotedClientSide(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{"pullRequestId": 1, "title": "voted", "createdBy": map[string]any{"displayName": "x"}, "repository": map[string]any{"id": "r", "name": "R"}, "creationDate": "2026-04-25T10:00:00Z",
+					"reviewers": []map[string]any{{"id": "me-uuid", "vote": 10}},
+				},
+				{"pullRequestId": 2, "title": "no vote", "createdBy": map[string]any{"displayName": "x"}, "repository": map[string]any{"id": "r", "name": "R"}, "creationDate": "2026-04-25T10:00:00Z",
+					"reviewers": []map[string]any{{"id": "me-uuid", "vote": 0}},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+	c := NewClient("ignored", &fakeTokens{})
+	c.BaseURL = srv.URL
+	prs, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Engineering", Tab: TabAssigned, MyID: "me-uuid"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prs) != 1 || prs[0].ID != 2 {
+		t.Fatalf("Assigned should hide voted PRs, got %+v", prs)
+	}
+}
+
+func TestListPullRequestsAllReviewingKeepsVoted(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"value": []map[string]any{
@@ -109,8 +134,8 @@ func TestListPullRequestsReviewRequestedFiltersClientSide(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(prs) != 1 || prs[0].ID != 2 {
-		t.Fatalf("expected only PR 2 (no vote yet), got %+v", prs)
+	if len(prs) != 2 {
+		t.Fatalf("All-reviewing should keep both PRs, got %+v", prs)
 	}
 }
 

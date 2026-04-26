@@ -175,7 +175,7 @@ func (m ListModel) updateFiltering(msg tea.KeyMsg) (ListModel, tea.Cmd) {
 
 func (m ListModel) View() string {
 	var b strings.Builder
-	tabs := []string{"Assigned", "Created", "Review requested"}
+	tabs := []string{ado.TabAssigned.String(), ado.TabCreated.String(), ado.TabReviewRequested.String()}
 	for i, name := range tabs {
 		count := len(m.prs[ado.Tab(i)])
 		label := fmt.Sprintf(" %s (%d) ", name, count)

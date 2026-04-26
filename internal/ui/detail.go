@@ -31,6 +31,7 @@ type DetailModel struct {
 	cursor   int
 	loadErr  string
 	width    int
+	height   int
 }
 
 func NewDetail(keys KeyMap) DetailModel { return DetailModel{keys: keys} }
@@ -62,6 +63,7 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
+		m.height = msg.Height
 	case detailLoadedMsg:
 		if msg.err != nil {
 			m.loadErr = msg.err.Error()
@@ -96,13 +98,22 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 func (m DetailModel) View() string {
 	var b strings.Builder
 	s := m.summary
-	fmt.Fprintf(&b, "PR #%d  %s\n", s.ID, s.Title)
+	b.WriteString(Header.Render(fmt.Sprintf("PR #%d  %s", s.ID, s.Title)))
+	b.WriteString("\n")
 	b.WriteString(Faint.Render(fmt.Sprintf("%s  %s → %s", s.Author, s.SourceBranch, s.TargetBranch)))
 	b.WriteString("\n\n")
 
 	if m.detail != nil {
-		b.WriteString(m.detail.DescriptionMD)
-		b.WriteString("\n\n")
+		desc := strings.TrimSpace(m.detail.DescriptionMD)
+		if desc != "" {
+			lines := strings.Split(desc, "\n")
+			descCap := m.descCap()
+			if len(lines) > descCap {
+				lines = append(lines[:descCap], Faint.Render(fmt.Sprintf("… (%d more lines)", len(lines)-descCap)))
+			}
+			b.WriteString(strings.Join(lines, "\n"))
+			b.WriteString("\n\n")
+		}
 		if len(m.detail.WorkItemRefs) > 0 {
 			b.WriteString("Work items: ")
 			for i, w := range m.detail.WorkItemRefs {
@@ -128,7 +139,9 @@ func (m DetailModel) View() string {
 	if m.loadErr != "" {
 		b.WriteString(ErrLine.Render(m.loadErr) + "\n")
 	}
-	for i, f := range m.files {
+	start, end := m.fileWindow()
+	for i := start; i < end; i++ {
+		f := m.files[i]
 		marker := "  "
 		if i == m.cursor {
 			marker = "▸ "
@@ -139,7 +152,55 @@ func (m DetailModel) View() string {
 		}
 		b.WriteString(line + "\n")
 	}
+	if start > 0 || end < len(m.files) {
+		b.WriteString(Faint.Render(fmt.Sprintf("  [%d-%d of %d]\n", start+1, end, len(m.files))))
+	}
 	return b.String()
+}
+
+func (m DetailModel) descCap() int {
+	if m.height <= 0 {
+		return 8
+	}
+	c := m.height / 4
+	if c < 4 {
+		c = 4
+	}
+	if c > 12 {
+		c = 12
+	}
+	return c
+}
+
+func (m DetailModel) fileWindow() (int, int) {
+	total := len(m.files)
+	if total == 0 {
+		return 0, 0
+	}
+	if m.height <= 0 {
+		return 0, total
+	}
+	cap := m.height - m.descCap() - 12
+	if cap < 3 {
+		cap = 3
+	}
+	if cap >= total {
+		return 0, total
+	}
+	start := m.cursor - cap/2
+	if start < 0 {
+		start = 0
+	}
+	if start+cap > total {
+		start = total - cap
+	}
+	if m.cursor < start {
+		start = m.cursor
+	}
+	if m.cursor >= start+cap {
+		start = m.cursor - cap + 1
+	}
+	return start, start + cap
 }
 
 func statusGlyph(state string) string {

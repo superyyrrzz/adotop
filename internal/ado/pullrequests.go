@@ -19,11 +19,11 @@ const (
 func (t Tab) String() string {
 	switch t {
 	case TabAssigned:
-		return "Assigned"
+		return "Assigned to me"
 	case TabCreated:
-		return "Created"
+		return "Created by me"
 	case TabReviewRequested:
-		return "Review requested"
+		return "All reviewing"
 	}
 	return "?"
 }
@@ -119,7 +119,7 @@ func (c *Client) ListPullRequests(ctx context.Context, f ListPRFilter) ([]PRSumm
 	out := make([]PRSummary, 0, len(resp.Value))
 	for _, r := range resp.Value {
 		s := toSummary(r, f.MyID)
-		if f.Tab == TabReviewRequested && s.MyVote != 0 {
+		if f.Tab == TabAssigned && s.MyVote != 0 {
 			continue
 		}
 		out = append(out, s)
