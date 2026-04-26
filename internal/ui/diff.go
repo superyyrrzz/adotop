@@ -47,7 +47,7 @@ func (m DiffModel) Update(msg tea.Msg) (DiffModel, tea.Cmd) {
 			m.vp.SetContent("error: " + m.loadErr)
 		} else {
 			m.loaded = true
-			m.vp.SetContent(string(msg.content))
+			m.vp.SetContent(string(Colorize(msg.content)))
 			m.vp.GotoTop()
 		}
 	case tea.KeyMsg:
