@@ -4,12 +4,14 @@ package ui
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/renzeyu/adotop/internal/cache"
 	"github.com/renzeyu/adotop/internal/config"
 	"github.com/renzeyu/adotop/internal/gitlocal"
 )
@@ -26,6 +28,7 @@ type Model struct {
 	cfg    config.Config
 	client *ado.Client
 	git    *gitlocal.Finder
+	cache  *cache.Store
 	keys   KeyMap
 
 	user   string
@@ -44,7 +47,7 @@ type Model struct {
 
 func New(cfg config.Config, client *ado.Client) Model {
 	keys := DefaultKeys()
-	return Model{
+	m := Model{
 		cfg:      cfg,
 		client:   client,
 		git:      gitlocal.New(cfg.RepoRoots),
@@ -55,6 +58,24 @@ func New(cfg config.Config, client *ado.Client) Model {
 		user:     "loading…",
 		useDelta: gitlocal.HasDelta(),
 	}
+	st, err := cache.New()
+	if err != nil {
+		slog.Warn("cache disabled", "err", err)
+		return m
+	}
+	m.cache = st
+	if id, ok := st.LoadIdentity(); ok {
+		m.user = id.DisplayName
+		m.myID = id.UserID
+	}
+	if cfg.Org != "" && cfg.Project != "" {
+		for _, tab := range []ado.Tab{ado.TabAssigned, ado.TabCreated, ado.TabReviewRequested} {
+			if prs, ok := st.LoadList(cfg.Org, cfg.Project, tab); ok {
+				m.list, _ = m.list.Update(prsLoadedMsg{tab: tab, prs: prs})
+			}
+		}
+	}
+	return m
 }
 
 type connDataMsg struct {
@@ -162,6 +183,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.user = msg.data.DisplayName()
 		m.myID = msg.data.AuthenticatedUser.ID
+		if m.cache != nil {
+			if err := m.cache.SaveIdentity(m.myID, m.user); err != nil {
+				slog.Warn("cache: save identity", "err", err)
+			}
+		}
 		return m, m.loadList(m.list.Tab())
 	case tickMsg:
 		var cmd tea.Cmd
@@ -171,6 +197,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, tick(m.cfg.RefreshInterval.Duration))
 	case tabSwitchedMsg:
 		return m, m.loadList(msg.Tab)
+	case prsLoadedMsg:
+		if msg.err == nil && m.cache != nil && m.cfg.Org != "" && m.cfg.Project != "" {
+			if err := m.cache.SaveList(m.cfg.Org, m.cfg.Project, msg.tab, msg.prs); err != nil {
+				slog.Warn("cache: save list", "tab", msg.tab, "err", err)
+			}
+		}
+		var cmd tea.Cmd
+		m.list, cmd = m.list.Update(msg)
+		return m, cmd
 	case tea.KeyMsg:
 		if keyMatches(msg, m.keys.Quit) {
 			return m, tea.Quit
