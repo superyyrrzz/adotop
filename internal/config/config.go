@@ -15,6 +15,7 @@ type Config struct {
 	Org             string            `toml:"org"`
 	Project         string            `toml:"project"`
 	RefreshInterval Duration          `toml:"refresh_interval"`
+	RepoRoots       []string          `toml:"repo_roots"`
 	Keybindings     map[string]string `toml:"keybindings"`
 }
 
