@@ -30,7 +30,7 @@ func (c ConnectionData) DisplayName() string {
 // GetConnectionData calls /_apis/connectionData on the org base URL.
 func (c *Client) GetConnectionData(ctx context.Context) (*ConnectionData, error) {
 	var out ConnectionData
-	if err := c.GetJSON(ctx, "/_apis/connectionData", &out); err != nil {
+	if err := c.GetJSON(ctx, "/_apis/connectionData?api-version=7.1-preview", &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

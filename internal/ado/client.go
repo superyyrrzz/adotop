@@ -62,15 +62,13 @@ func (c *Client) GetJSON(ctx context.Context, path string, out any) error {
 }
 
 func (c *Client) resolve(path string) (string, error) {
-	base, err := url.Parse(c.BaseURL)
+	if path == "" || path[0] != '/' {
+		path = "/" + path
+	}
+	u, err := url.Parse(c.BaseURL + path)
 	if err != nil {
 		return "", err
 	}
-	ref, err := url.Parse(path)
-	if err != nil {
-		return "", err
-	}
-	u := base.ResolveReference(ref)
 	q := u.Query()
 	if q.Get("api-version") == "" {
 		q.Set("api-version", APIVersion)
