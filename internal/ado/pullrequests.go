@@ -152,3 +152,95 @@ func toSummary(r rawPR, myID string) PRSummary {
 	}
 	return s
 }
+
+type WorkItemRef struct {
+	ID  string
+	URL string
+}
+
+type FileChange struct {
+	Path       string
+	ChangeType string
+}
+
+type PRDetail struct {
+	PRSummary
+	DescriptionMD string
+	WorkItemRefs  []WorkItemRef
+	SourceSha     string
+	TargetSha     string
+}
+
+type rawPRDetail struct {
+	rawPR
+	Description           string `json:"description"`
+	LastMergeSourceCommit struct {
+		CommitID string `json:"commitId"`
+	} `json:"lastMergeSourceCommit"`
+	LastMergeTargetCommit struct {
+		CommitID string `json:"commitId"`
+	} `json:"lastMergeTargetCommit"`
+	WorkItemRefs []struct {
+		ID  string `json:"id"`
+		URL string `json:"url"`
+	} `json:"workItemRefs"`
+}
+
+func (c *Client) GetPullRequest(ctx context.Context, repoID string, prID int, myID string) (*PRDetail, error) {
+	path := fmt.Sprintf("/_apis/git/repositories/%s/pullrequests/%d?includeWorkItemRefs=true",
+		url.PathEscape(repoID), prID)
+	var r rawPRDetail
+	if err := c.GetJSON(ctx, path, &r); err != nil {
+		return nil, err
+	}
+	d := &PRDetail{
+		PRSummary:     toSummary(r.rawPR, myID),
+		DescriptionMD: r.Description,
+		SourceSha:     r.LastMergeSourceCommit.CommitID,
+		TargetSha:     r.LastMergeTargetCommit.CommitID,
+	}
+	for _, w := range r.WorkItemRefs {
+		d.WorkItemRefs = append(d.WorkItemRefs, WorkItemRef{ID: w.ID, URL: w.URL})
+	}
+	return d, nil
+}
+
+type rawIteration struct {
+	ID int `json:"id"`
+}
+type rawIterationsResp struct {
+	Value []rawIteration `json:"value"`
+}
+type rawChangeEntry struct {
+	ChangeType string `json:"changeType"`
+	Item       struct {
+		Path string `json:"path"`
+	} `json:"item"`
+}
+type rawChangesResp struct {
+	ChangeEntries []rawChangeEntry `json:"changeEntries"`
+}
+
+func (c *Client) GetIterationChanges(ctx context.Context, repoID string, prID int) ([]FileChange, error) {
+	itPath := fmt.Sprintf("/_apis/git/repositories/%s/pullrequests/%d/iterations",
+		url.PathEscape(repoID), prID)
+	var its rawIterationsResp
+	if err := c.GetJSON(ctx, itPath, &its); err != nil {
+		return nil, err
+	}
+	if len(its.Value) == 0 {
+		return nil, nil
+	}
+	latest := its.Value[len(its.Value)-1].ID
+	chPath := fmt.Sprintf("/_apis/git/repositories/%s/pullrequests/%d/iterations/%d/changes",
+		url.PathEscape(repoID), prID, latest)
+	var ch rawChangesResp
+	if err := c.GetJSON(ctx, chPath, &ch); err != nil {
+		return nil, err
+	}
+	out := make([]FileChange, 0, len(ch.ChangeEntries))
+	for _, e := range ch.ChangeEntries {
+		out = append(out, FileChange{Path: e.Item.Path, ChangeType: e.ChangeType})
+	}
+	return out, nil
+}

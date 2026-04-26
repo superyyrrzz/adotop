@@ -113,3 +113,78 @@ func TestListPullRequestsReviewRequestedFiltersClientSide(t *testing.T) {
 		t.Fatalf("expected only PR 2 (no vote yet), got %+v", prs)
 	}
 }
+
+func TestGetPullRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/_apis/git/repositories/repo-uuid/pullrequests/1234") {
+			t.Fatalf("path: %s", r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"pullRequestId": 1234,
+			"title":         "Fix login bug",
+			"description":   "## Why\nFixes thing.",
+			"sourceRefName": "refs/heads/feat/login",
+			"targetRefName": "refs/heads/main",
+			"creationDate":  "2026-04-25T10:00:00Z",
+			"createdBy":     map[string]any{"displayName": "alice"},
+			"repository":    map[string]any{"id": "repo-uuid", "name": "MyRepo"},
+			"lastMergeSourceCommit": map[string]any{"commitId": "src-sha"},
+			"lastMergeTargetCommit": map[string]any{"commitId": "tgt-sha"},
+			"workItemRefs":  []map[string]any{{"id": "98765", "url": "https://x/_apis/wit/workItems/98765"}},
+			"_links":        map[string]any{"web": map[string]any{"href": "https://x"}},
+		})
+	}))
+	defer srv.Close()
+	c := NewClient("ignored", &fakeTokens{})
+	c.BaseURL = srv.URL
+	d, err := c.GetPullRequest(context.Background(), "repo-uuid", 1234, "me-uuid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.DescriptionMD != "## Why\nFixes thing." {
+		t.Fatalf("desc: %q", d.DescriptionMD)
+	}
+	if d.SourceSha != "src-sha" || d.TargetSha != "tgt-sha" {
+		t.Fatalf("shas: %+v", d)
+	}
+	if len(d.WorkItemRefs) != 1 || d.WorkItemRefs[0].ID != "98765" {
+		t.Fatalf("workitems: %+v", d.WorkItemRefs)
+	}
+}
+
+func TestGetIterationChanges(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/iterations"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"value": []map[string]any{
+					{"id": 1}, {"id": 2}, {"id": 3},
+				},
+			})
+		case strings.Contains(r.URL.Path, "/iterations/3/changes"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"changeEntries": []map[string]any{
+					{"changeType": "edit", "item": map[string]any{"path": "/src/login.go"}},
+					{"changeType": "add", "item": map[string]any{"path": "/src/new.go"}},
+				},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	c := NewClient("ignored", &fakeTokens{})
+	c.BaseURL = srv.URL
+	files, err := c.GetIterationChanges(context.Background(), "repo-uuid", 1234)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 || files[0].Path != "/src/login.go" || files[0].ChangeType != "edit" {
+		t.Fatalf("files: %+v", files)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 calls (iterations + changes), got %v", calls)
+	}
+}
