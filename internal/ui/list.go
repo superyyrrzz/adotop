@@ -25,6 +25,7 @@ type ListModel struct {
 	filter    string
 	filtering bool
 	width     int
+	height    int
 	loadErr   string
 }
 
@@ -33,6 +34,38 @@ func NewList(keys KeyMap) ListModel {
 }
 
 func (m ListModel) Tab() ado.Tab { return m.tab }
+
+// window returns [start, end) indices of rows that fit in the current view,
+// keeping m.cursor visible. Each row uses 2 lines; tabs+blank reserve 2,
+// filter/footer reserve 2.
+func (m ListModel) window(total int) (int, int) {
+	const rowLines = 2
+	const chrome = 4
+	if m.height <= 0 {
+		return 0, total
+	}
+	cap := (m.height - chrome) / rowLines
+	if cap <= 0 {
+		cap = 1
+	}
+	if cap >= total {
+		return 0, total
+	}
+	start := m.cursor - cap/2
+	if start < 0 {
+		start = 0
+	}
+	if start+cap > total {
+		start = total - cap
+	}
+	if m.cursor < start {
+		start = m.cursor
+	}
+	if m.cursor >= start+cap {
+		start = m.cursor - cap + 1
+	}
+	return start, start + cap
+}
 
 func (m ListModel) Selected() (ado.PRSummary, bool) {
 	rows := m.visible()
@@ -81,6 +114,7 @@ func (m ListModel) Update(msg tea.Msg) (ListModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
+		m.height = msg.Height
 	case prsLoadedMsg:
 		if msg.err != nil {
 			m.loadErr = msg.err.Error()
@@ -160,7 +194,9 @@ func (m ListModel) View() string {
 	} else if len(rows) == 0 {
 		b.WriteString(Faint.Render("No PRs in this tab.\n"))
 	} else {
-		for i, p := range rows {
+		start, end := m.window(len(rows))
+		for i := start; i < end; i++ {
+			p := rows[i]
 			line := fmt.Sprintf("#%-5d %-40s %-12s %s → %s   %s",
 				p.ID, truncate(p.Title, 40), truncate(p.Author, 12),
 				p.SourceBranch, p.TargetBranch, age(p.CreatedAt))
@@ -175,6 +211,9 @@ func (m ListModel) View() string {
 			b.WriteString("    ")
 			b.WriteString(voteGlyphs(p.Reviewers))
 			b.WriteString("\n")
+		}
+		if start > 0 || end < len(rows) {
+			b.WriteString(Faint.Render(fmt.Sprintf("  [%d-%d of %d]\n", start+1, end, len(rows))))
 		}
 	}
 

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -53,5 +54,49 @@ func TestListNextTabEmitsLoad(t *testing.T) {
 	}
 	if m.tab != ado.TabCreated {
 		t.Fatalf("tab = %v, want Created", m.tab)
+	}
+}
+
+func manyPRs(n int) []ado.PRSummary {
+	out := make([]ado.PRSummary, n)
+	for i := range out {
+		out[i] = ado.PRSummary{ID: 1000 + i, Title: fmt.Sprintf("PR-%d", i), Author: "a", SourceBranch: "f", TargetBranch: "main"}
+	}
+	return out
+}
+
+func TestListWindowsLongListAroundCursor(t *testing.T) {
+	m := NewList(DefaultKeys())
+	// Tabs(1) + blank(1) + 2 lines per row. Height 14 ⇒ ~6 rows fit.
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 14})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: manyPRs(40)})
+
+	out := m.View()
+	if !strings.Contains(out, "#1000") {
+		t.Fatalf("first row should be visible at top:\n%s", out)
+	}
+	if strings.Contains(out, "#1039") {
+		t.Fatalf("last row must NOT be visible when cursor is at top:\n%s", out)
+	}
+
+	// Move cursor far down; the window must follow.
+	for i := 0; i < 30; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	}
+	out = m.View()
+	if !strings.Contains(out, "#1030") {
+		t.Fatalf("cursor row #1030 should be visible after scrolling:\n%s", out)
+	}
+	if strings.Contains(out, "#1000") {
+		t.Fatalf("top row should have scrolled out of view:\n%s", out)
+	}
+
+	// Scroll back up; top row should reappear.
+	for i := 0; i < 30; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	}
+	out = m.View()
+	if !strings.Contains(out, "#1000") {
+		t.Fatalf("top row should be back in view after scrolling up:\n%s", out)
 	}
 }
