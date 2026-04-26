@@ -195,6 +195,15 @@ func (m ListModel) View() string {
 	} else if len(rows) == 0 {
 		b.WriteString(Faint.Render("No PRs in this tab.\n"))
 	} else {
+		header := fmt.Sprintf("%s %s %s %s   %s   %s",
+			padCols("ID", 8),
+			padCols("Title", 40),
+			padCols("Author", 14),
+			padCols("Source", 22),
+			padCols("Target", 18),
+			padCols("Age", 6))
+		b.WriteString(Faint.Render(header))
+		b.WriteString("\n")
 		start, end := m.window(len(rows))
 		for i := start; i < end; i++ {
 			p := rows[i]

@@ -208,6 +208,24 @@ func TestListDraftBadgeAlignsAcrossAges(t *testing.T) {
 	}
 }
 
+func TestListShowsColumnHeadings(t *testing.T) {
+	m := NewList(DefaultKeys())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: samplePRs()})
+	out := m.View()
+	for _, h := range []string{"ID", "Title", "Author", "Source", "Target", "Age"} {
+		if !strings.Contains(out, h) {
+			t.Fatalf("missing header %q in:\n%s", h, out)
+		}
+	}
+	// Header should appear above the PR rows.
+	hi := strings.Index(out, "Title")
+	ri := strings.Index(out, "#1234")
+	if hi < 0 || ri < 0 || hi > ri {
+		t.Fatalf("header should precede rows: hi=%d ri=%d\n%s", hi, ri, out)
+	}
+}
+
 func TestListNextTabEmitsLoad(t *testing.T) {
 	m := NewList(DefaultKeys())
 	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
