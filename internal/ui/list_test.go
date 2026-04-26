@@ -79,6 +79,43 @@ func TestListColumnsAlignWithEllipsizedTitle(t *testing.T) {
 	}
 }
 
+func TestListAgeColumnAlignsAcrossVaryingBranchLengths(t *testing.T) {
+	now := time.Now()
+	m := NewList(DefaultKeys())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: []ado.PRSummary{
+		{ID: 1, Title: "t1", Author: "a", SourceBranch: "f", TargetBranch: "main", CreatedAt: now.Add(-2 * time.Hour)},
+		{ID: 2, Title: "t2", Author: "b", SourceBranch: "users/someone/very-long-feature-branch-name", TargetBranch: "release/2026.05", CreatedAt: now.Add(-3 * time.Hour)},
+	}})
+	out := m.View()
+	runeIndex := func(line, sub string) int {
+		i := strings.Index(line, sub)
+		if i < 0 {
+			return -1
+		}
+		return len([]rune(line[:i]))
+	}
+	var col1, col2 int = -1, -1
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "#1 ") || strings.Contains(line, "#1\t") || strings.HasPrefix(strings.TrimLeft(line, " "), "#1 ") {
+			if c := runeIndex(line, "2h"); c >= 0 {
+				col1 = c
+			}
+		}
+		if strings.Contains(line, "#2 ") || strings.Contains(line, "#2\t") || strings.HasPrefix(strings.TrimLeft(line, " "), "#2 ") {
+			if c := runeIndex(line, "3h"); c >= 0 {
+				col2 = c
+			}
+		}
+	}
+	if col1 < 0 || col2 < 0 {
+		t.Fatalf("could not locate age columns: col1=%d col2=%d\n%s", col1, col2, out)
+	}
+	if col1 != col2 {
+		t.Fatalf("age column not aligned across varying branch lengths: 2h@col%d 3h@col%d\n%s", col1, col2, out)
+	}
+}
+
 func TestListNextTabEmitsLoad(t *testing.T) {
 	m := NewList(DefaultKeys())
 	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})

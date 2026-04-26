@@ -198,8 +198,12 @@ func (m ListModel) View() string {
 		for i := start; i < end; i++ {
 			p := rows[i]
 			line := fmt.Sprintf("#%-5d %s %s %s → %s   %s",
-				p.ID, padRunes(truncate(p.Title, 40), 40), padRunes(truncate(p.Author, 12), 12),
-				p.SourceBranch, p.TargetBranch, age(p.CreatedAt))
+				p.ID,
+				padRunes(truncate(p.Title, 40), 40),
+				padRunes(truncate(p.Author, 12), 12),
+				padRunes(truncate(p.SourceBranch, 20), 20),
+				padRunes(truncate(p.TargetBranch, 16), 16),
+				age(p.CreatedAt))
 			if p.Draft {
 				line += "  [DRAFT]"
 			}
