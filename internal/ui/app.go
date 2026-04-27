@@ -60,6 +60,11 @@ type Model struct {
 
 	pendingAction pendingAction // empty action == no prompt
 
+	// pendingG is set when the user pressed `g` and we're waiting for
+	// the second key of the vim-style `gg` sequence. Any other key
+	// cancels the pending state. Reset on screen change.
+	pendingG bool
+
 	threads        []ado.Thread
 	showResolved   bool
 	expandedThread map[int]bool
@@ -489,6 +494,27 @@ func (m Model) updateListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Vim-style gg/G: `g` is a lead-in that arms pendingG, the next
+	// keystroke completes (or cancels) the sequence. `G` is a one-shot
+	// jump-to-end. Behavior depends on which pane is focused:
+	//   - Files focus: jump file cursor to first/last in display order.
+	//   - Diff focus:  jump preview viewport to top/bottom.
+	if m.pendingG {
+		m.pendingG = false
+		if keyMatches(msg, m.keys.GotoTop) {
+			return m.gotoTop()
+		}
+		// Any other key cancels and falls through to normal handling.
+	}
+	if keyMatches(msg, m.keys.GotoTop) {
+		// First `g`: arm pending and wait for the second.
+		m.pendingG = true
+		return m, nil
+	}
+	if keyMatches(msg, m.keys.GotoEnd) {
+		return m.gotoEnd()
+	}
+
 	switch {
 	case msg.Type == tea.KeyTab:
 		if m.detailFocus == focusFiles {
@@ -585,6 +611,39 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// gotoTop implements the gg sequence: in Files focus, jump cursor to
+// the first file in display order and reload its preview; in Diff
+// focus, scroll the preview viewport to the top.
+func (m Model) gotoTop() (tea.Model, tea.Cmd) {
+	if m.detailFocus == focusDiff {
+		m.preview.vp.GotoTop()
+		return m, nil
+	}
+	idx := m.detail.FirstDisplayFile()
+	if idx < 0 || idx == m.detail.cursor {
+		return m, nil
+	}
+	m.detail.cursor = idx
+	mm, cmd := m.queuePreviewForSelection()
+	return mm, cmd
+}
+
+// gotoEnd implements G: in Files focus, jump cursor to the last file
+// in display order; in Diff focus, scroll viewport to the bottom.
+func (m Model) gotoEnd() (tea.Model, tea.Cmd) {
+	if m.detailFocus == focusDiff {
+		m.preview.vp.GotoBottom()
+		return m, nil
+	}
+	idx := m.detail.LastDisplayFile()
+	if idx < 0 || idx == m.detail.cursor {
+		return m, nil
+	}
+	m.detail.cursor = idx
+	mm, cmd := m.queuePreviewForSelection()
+	return mm, cmd
+}
+
 func (m Model) View() string {
 	header := Header.Render(fmt.Sprintf("adotop  %s/%s  user=%s", orPlaceholder(m.cfg.Org, "(no org)"), orPlaceholder(m.cfg.Project, "(no project)"), m.user))
 	var body string
@@ -606,7 +665,8 @@ func (m Model) View() string {
 			"  #           jump to PR by ID (list)",
 			"  tab/shift+tab  switch focus (Detail)",
 			"  n / N       next / prev file (Detail)",
-			"  ↑↓ pgup/pgdn g/G  scroll focused pane",
+			"  ↑↓ pgup/pgdn  scroll focused pane",
+			"  gg / G       jump to first / last (file list or diff, depending on focus)",
 			"  a           approve PR (Detail)",
 			"  X           abandon PR (Detail, confirms)",
 			"  enter       expand comment threads on focused file (Diff focus)",
@@ -640,7 +700,7 @@ func footerHints(s screen) string {
 	case screenList:
 		return "/:filter  #:goto  enter:open  o:browser  r:refresh  tab:next  ?:help  q:quit"
 	case screenDetail:
-		return "tab:focus  n/N:file  ↑↓ pgup/pgdn g/G:scroll  enter:expand-comments  R:show-resolved  a:approve  X:abandon  o:browser  esc/q:back  r:refresh  ?:help"
+		return "tab:focus  n/N:file  ↑↓ pgup/pgdn:scroll  gg/G:top/bottom  enter:expand-comments  R:show-resolved  a:approve  X:abandon  o:browser  esc/q:back  r:refresh  ?:help"
 	}
 	return ""
 }

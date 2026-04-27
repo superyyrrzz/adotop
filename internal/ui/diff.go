@@ -85,12 +85,9 @@ func (m DiffModel) Update(msg tea.Msg) (DiffModel, tea.Cmd) {
 			m.vp.GotoTop()
 		}
 	case tea.KeyMsg:
-		switch {
-		case keyMatches(msg, m.keys.GotoTop):
-			m.vp.GotoTop()
-		case keyMatches(msg, m.keys.GotoEnd):
-			m.vp.GotoBottom()
-		}
+		// g/G are intercepted at the app level (see updateDetailScreen)
+		// so they can dispatch to the file list or the diff viewport
+		// based on focus. Nothing to do here.
 	}
 	var cmd tea.Cmd
 	m.vp, cmd = m.vp.Update(msg)

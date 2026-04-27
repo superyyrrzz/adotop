@@ -247,6 +247,31 @@ func (m DetailModel) DisplayNeighbors(radius int) []int {
 
 func (m DetailModel) View() string { return m.ViewWithFocus(true) }
 
+// FirstDisplayFile returns the file index of the first file in display
+// (sorted-tree) order, or -1 when there are no files. Used by gg in
+// the Files pane to jump the cursor to the top of the list.
+func (m DetailModel) FirstDisplayFile() int {
+	rows := m.fileTree()
+	for _, r := range rows {
+		if !r.isDir {
+			return r.fileIdx
+		}
+	}
+	return -1
+}
+
+// LastDisplayFile is the symmetric helper for G — returns the file
+// index of the last file in display order, or -1 when empty.
+func (m DetailModel) LastDisplayFile() int {
+	rows := m.fileTree()
+	for i := len(rows) - 1; i >= 0; i-- {
+		if !rows[i].isDir {
+			return rows[i].fileIdx
+		}
+	}
+	return -1
+}
+
 func (m DetailModel) FilesHeader(focused bool) string {
 	dot := "○ "
 	if focused {

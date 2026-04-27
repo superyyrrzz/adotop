@@ -418,3 +418,4 @@ func TestListJumpPromptCollectsDigitsAndEmitsRequest(t *testing.T) {
 		t.Fatalf("expected jumpRequestedMsg{ID:12}, got %T %+v", got, got)
 	}
 }
+
