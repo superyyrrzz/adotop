@@ -92,7 +92,7 @@ func TestDetailViewShowsPreviewPane(t *testing.T) {
 	if !strings.Contains(out, "Diff Preview") {
 		t.Fatalf("missing preview pane title:\n%s", out)
 	}
-	if !strings.Contains(out, "/src/login.go") || !strings.Contains(out, "+new") {
+	if !strings.Contains(out, "/src/login.go") || !strings.Contains(out, "new") {
 		t.Fatalf("missing preview diff content:\n%s", out)
 	}
 }

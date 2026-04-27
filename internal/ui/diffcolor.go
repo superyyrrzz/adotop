@@ -36,8 +36,8 @@ func Colorize(in []byte) []byte {
 	var out bytes.Buffer
 	out.Grow(len(in) + len(in)/4)
 	lines := strings.SplitAfter(string(in), "\n")
+	currentPath := ""
 	for _, line := range lines {
-		// Trim trailing newline for inspection but re-add at end.
 		body := line
 		nl := ""
 		if strings.HasSuffix(body, "\n") {
@@ -45,37 +45,56 @@ func Colorize(in []byte) []byte {
 			nl = "\n"
 		}
 		switch {
-		case strings.HasPrefix(body, "+++ ") || strings.HasPrefix(body, "--- "):
+		case strings.HasPrefix(body, "+++ "):
+			currentPath = stripDiffPathPrefix(body[4:])
+			out.WriteString(ansiBold)
+			out.WriteString(body)
+			out.WriteString(ansiReset)
+		case strings.HasPrefix(body, "--- "):
 			out.WriteString(ansiBold)
 			out.WriteString(body)
 			out.WriteString(ansiReset)
 		case strings.HasPrefix(body, "@@"):
 			out.WriteString(hunkBar)
-			out.WriteString(ansiBold)
 			out.WriteString(ansiCyan)
 			out.WriteString(body)
 			out.WriteString(ansiReset)
 		case strings.HasPrefix(body, "+"):
 			out.WriteString(addBar)
-			out.WriteString(ansiBold)
 			out.WriteString(ansiGreen)
-			out.WriteString(body)
+			out.WriteString("+")
 			out.WriteString(ansiReset)
+			out.WriteString(HighlightLine(currentPath, body[1:]))
 		case strings.HasPrefix(body, "-"):
 			out.WriteString(deleteBar)
-			out.WriteString(ansiBold)
 			out.WriteString(ansiRed)
-			out.WriteString(body)
+			out.WriteString("-")
 			out.WriteString(ansiReset)
+			out.WriteString(HighlightLine(currentPath, body[1:]))
 		case strings.HasPrefix(body, "diff ") || strings.HasPrefix(body, "index "):
 			out.WriteString(ansiDim)
 			out.WriteString(body)
 			out.WriteString(ansiReset)
 		default:
 			out.WriteString(contextBar)
-			out.WriteString(body)
+			if len(body) > 0 && body[0] == ' ' {
+				out.WriteString(" ")
+				out.WriteString(HighlightLine(currentPath, body[1:]))
+			} else {
+				out.WriteString(HighlightLine(currentPath, body))
+			}
 		}
 		out.WriteString(nl)
 	}
 	return out.Bytes()
+}
+
+// stripDiffPathPrefix removes a leading "a/" or "b/" if present and trims
+// trailing whitespace, leaving something filepath.Ext can use.
+func stripDiffPathPrefix(s string) string {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "a/") || strings.HasPrefix(s, "b/") {
+		return s[2:]
+	}
+	return s
 }

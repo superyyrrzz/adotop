@@ -13,7 +13,7 @@ func TestDiffViewShowsRendererBadge(t *testing.T) {
 	if !strings.Contains(out, "/src/login.go") || !strings.Contains(out, "local+delta") {
 		t.Fatalf("header missing:\n%s", out)
 	}
-	if !strings.Contains(out, "+new") {
+	if !strings.Contains(out, "new") {
 		t.Fatalf("body missing:\n%s", out)
 	}
 }
