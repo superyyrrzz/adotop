@@ -23,12 +23,13 @@ const (
 )
 
 type DiffModel struct {
-	keys     KeyMap
-	file     string
-	renderer string
-	vp       viewport.Model
-	loadErr  string
-	loaded   bool
+	keys      KeyMap
+	file      string
+	renderer  string
+	vp        viewport.Model
+	loadErr   string
+	loaded    bool
+	reloading bool
 }
 
 func NewDiff(keys KeyMap) DiffModel {
@@ -51,9 +52,11 @@ func (m DiffModel) SetSize(width, height int) DiffModel {
 func (m DiffModel) SetHeader(file, renderer string) DiffModel {
 	m.file = file
 	m.renderer = renderer
-	m.loaded = false
 	m.loadErr = ""
-	m.vp.SetContent("loading…")
+	if !m.loaded {
+		m.vp.SetContent("loading…")
+	}
+	m.reloading = m.loaded
 	return m
 }
 
@@ -68,6 +71,7 @@ func (m DiffModel) Update(msg tea.Msg) (DiffModel, tea.Cmd) {
 			m.vp.SetContent("error: " + m.loadErr)
 		} else {
 			m.loaded = true
+			m.reloading = false
 			m.vp.SetContent(string(Colorize(msg.content)))
 			m.vp.GotoTop()
 		}
@@ -86,7 +90,11 @@ func (m DiffModel) Update(msg tea.Msg) (DiffModel, tea.Cmd) {
 
 func (m DiffModel) View() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s  %s\n", Header.Render(m.file), Faint.Render("["+m.renderer+"]"))
+	suffix := "[" + m.renderer + "]"
+	if m.reloading {
+		suffix += " (reloading…)"
+	}
+	fmt.Fprintf(&b, "%s  %s\n", Header.Render(m.file), Faint.Render(suffix))
 	b.WriteString(m.vp.View())
 	if m.loadErr != "" {
 		b.WriteString("\n" + ErrLine.Render(m.loadErr))
