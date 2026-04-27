@@ -14,6 +14,7 @@ const (
 	TabAssigned Tab = iota
 	TabCreated
 	TabReviewRequested
+	TabRecents
 )
 
 func (t Tab) String() string {
@@ -24,6 +25,8 @@ func (t Tab) String() string {
 		return "Created by me"
 	case TabReviewRequested:
 		return "All reviewing"
+	case TabRecents:
+		return "Recents"
 	}
 	return "?"
 }
