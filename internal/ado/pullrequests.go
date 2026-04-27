@@ -232,6 +232,31 @@ func (c *Client) GetPullRequest(ctx context.Context, repoID string, prID int, my
 	return d, nil
 }
 
+// GetPullRequestByID looks up a PR by its global PR ID. Unlike GetPullRequest,
+// this does NOT require the repo ID — the org-scoped endpoint
+// /_apis/git/pullrequests/{id} returns the repo+project on the response.
+// Use this for the "jump to PR by number" UX when the user only knows the ID.
+func (c *Client) GetPullRequestByID(ctx context.Context, prID int, myID string) (*PRDetail, error) {
+	if prID == 0 {
+		return nil, fmt.Errorf("GetPullRequestByID: prID required")
+	}
+	path := fmt.Sprintf("/_apis/git/pullrequests/%d", prID)
+	var r rawPRDetail
+	if err := c.GetJSON(ctx, path, &r); err != nil {
+		return nil, err
+	}
+	d := &PRDetail{
+		PRSummary:     toSummary(r.rawPR, myID),
+		DescriptionMD: r.Description,
+		SourceSha:     r.LastMergeSourceCommit.CommitID,
+		TargetSha:     r.LastMergeTargetCommit.CommitID,
+	}
+	if d.URL == "" {
+		d.URL = c.webURLForPR(r.Repository.Project.Name, r.Repository.Name, r.PullRequestID)
+	}
+	return d, nil
+}
+
 type rawIteration struct {
 	ID int `json:"id"`
 }

@@ -214,6 +214,45 @@ func TestGetIterationChanges(t *testing.T) {
 	}
 }
 
+func TestGetPullRequestByIDHitsOrgScopedPath(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewEncoder(w).Encode(map[string]any{
+			"pullRequestId": 999,
+			"title":         "by id",
+			"sourceRefName": "refs/heads/x",
+			"targetRefName": "refs/heads/main",
+			"creationDate":  "2026-04-25T10:00:00Z",
+			"createdBy":     map[string]any{"displayName": "alice"},
+			"repository": map[string]any{
+				"id":      "repo-uuid",
+				"name":    "MyRepo",
+				"project": map[string]any{"name": "Engineering"},
+			},
+			"lastMergeSourceCommit": map[string]any{"commitId": "src"},
+			"lastMergeTargetCommit": map[string]any{"commitId": "tgt"},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient("ignored", &fakeTokens{})
+	c.BaseURL = srv.URL
+	d, err := c.GetPullRequestByID(context.Background(), 999, "me-uuid")
+	if err != nil {
+		t.Fatalf("GetPullRequestByID: %v", err)
+	}
+	if !strings.Contains(gotPath, "/_apis/git/pullrequests/999") {
+		t.Fatalf("unexpected path: %q", gotPath)
+	}
+	if d.ID != 999 || d.Repo != "MyRepo" || d.RepoID != "repo-uuid" {
+		t.Fatalf("decoded wrong: %+v", d)
+	}
+	if d.URL == "" {
+		t.Fatalf("expected synthesized URL")
+	}
+}
+
 func TestListPullRequestsSynthesizesURLWhenLinksMissing(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
