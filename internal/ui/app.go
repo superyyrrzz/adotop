@@ -525,7 +525,7 @@ func (m Model) prefetchOne(file ado.FileChange, key, sourceSha, targetSha string
 
 func (m Model) detailPreviewView() string {
 	layout := m.detailLayout()
-	left := m.detail.View()
+	left := m.detail.ViewWithFocus(m.detailFocus == focusFiles)
 	right := m.previewPaneView()
 	if !layout.split {
 		return strings.Join([]string{left, "", right}, "\n")
@@ -547,7 +547,11 @@ func (m Model) detailPreviewView() string {
 }
 
 func (m Model) previewPaneView() string {
-	title := Header.Render("Diff Preview")
+	dot := "○ "
+	if m.detailFocus == focusDiff {
+		dot = "● "
+	}
+	title := Header.Render(dot + "Diff Preview")
 	if m.preview.file == "" {
 		if _, ok := m.detail.SelectedFile(); !ok {
 			return title + "\n" + Faint.Render("No changed files available.")

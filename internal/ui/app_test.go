@@ -278,3 +278,30 @@ func TestDetailServesPrefetchedNeighborInstantly(t *testing.T) {
 		t.Fatalf("expected cached body to render immediately:\n%s", m.preview.vp.View())
 	}
 }
+
+func TestDetailFocusIndicatorMovesWithFocus(t *testing.T) {
+	m := newDetailModel(t)
+	m.width, m.height = 140, 40
+	m.preview = m.preview.SetSize(60, 20)
+	m.preview, _ = m.preview.Update(diffLoadedMsg{
+		content: []byte("--- a/x\n+++ b/x\n+hi\n"), target: diffTargetPreview,
+	})
+
+	out := m.detailPreviewView()
+	if !strings.Contains(out, "● Files") {
+		t.Fatalf("expected files header to show focus dot:\n%s", out)
+	}
+	if strings.Contains(out, "● Diff Preview") {
+		t.Fatalf("diff header should not show focus dot when files focused:\n%s", out)
+	}
+
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = mm.(Model)
+	out = m.detailPreviewView()
+	if !strings.Contains(out, "● Diff Preview") {
+		t.Fatalf("expected diff header to show focus dot:\n%s", out)
+	}
+	if strings.Contains(out, "● Files") {
+		t.Fatalf("files header should not show focus dot when diff focused:\n%s", out)
+	}
+}

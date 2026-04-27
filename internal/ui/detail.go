@@ -95,7 +95,17 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m DetailModel) View() string {
+func (m DetailModel) View() string { return m.ViewWithFocus(true) }
+
+func (m DetailModel) FilesHeader(focused bool) string {
+	dot := "○ "
+	if focused {
+		dot = "● "
+	}
+	return Header.Render(dot + "Files")
+}
+
+func (m DetailModel) ViewWithFocus(focused bool) string {
 	var b strings.Builder
 	s := m.summary
 	b.WriteString(Header.Render(fmt.Sprintf("PR #%d  %s", s.ID, s.Title)))
@@ -135,7 +145,7 @@ func (m DetailModel) View() string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("\n── Files ─────────────────────────────────\n")
+	b.WriteString("\n" + m.FilesHeader(focused) + "\n")
 	if m.loadErr != "" {
 		b.WriteString(ErrLine.Render(m.loadErr) + "\n")
 	}
