@@ -52,19 +52,7 @@ func TestLivePR1145087HeaderVisible(t *testing.T) {
 
 			out := m.ViewWithFocus(true)
 			fmt.Printf("\n===== pane %dx%d =====\n%s\n", tc.w, tc.h, out)
-
-			if d.Repo != "" && !strings.Contains(out, d.Repo) {
-				t.Errorf("repo %q missing at %dx%d", d.Repo, tc.w, tc.h)
-			}
-			if !strings.Contains(out, fmt.Sprintf("PR #%d", d.ID)) {
-				t.Errorf("PR title missing at %dx%d", tc.w, tc.h)
-			}
-			if !strings.Contains(out, "● Files") && !strings.Contains(out, "○ Files") {
-				t.Errorf("Files sub-header missing at %dx%d", tc.w, tc.h)
-			}
-			if lines := strings.Count(out, "\n"); lines > tc.h {
-				t.Errorf("rendered %d lines, exceeds pane height %d", lines, tc.h)
-			}
+			assertHeaderVisible(t, out, d.PRSummary, tc.h)
 		})
 	}
 }

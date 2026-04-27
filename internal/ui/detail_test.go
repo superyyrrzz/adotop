@@ -36,45 +36,31 @@ func TestDetailStatusesRendered(t *testing.T) {
 	}
 }
 
-func TestDetailHeaderVisibleWithLongDescriptionAndManyFiles(t *testing.T) {
-	m := NewDetail(DefaultKeys())
-	m = m.SetSummary(ado.PRSummary{
+func TestDetailHeaderVisibleAcrossPaneSizes(t *testing.T) {
+	summary := ado.PRSummary{
 		ID: 7, Title: "Big change", Repo: "acme/web",
 		Author: "alice", SourceBranch: "feat/x", TargetBranch: "main",
-	})
-	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
-	// Simulate the split-pane: detail pane is ~40 wide × 26 tall.
-	m = m.SetPaneSize(40, 26)
-	// Long description with WIDE lines that will wrap heavily in a 40-col pane.
+	}
+	// Long description with WIDE lines that will wrap heavily in narrow panes.
 	desc := ""
 	for i := 0; i < 50; i++ {
-		desc += fmt.Sprintf("description line %d with extra padding text to force the renderer to wrap because the pane is only forty columns wide and lines are long\n", i)
+		desc += fmt.Sprintf("description line %d with extra padding text to force the renderer to wrap because the pane may be narrow and lines are long\n", i)
 	}
-	m, _ = m.Update(detailLoadedMsg{detail: &ado.PRDetail{
-		PRSummary:     ado.PRSummary{ID: 7, Title: "Big change", Repo: "acme/web"},
-		DescriptionMD: desc,
-	}})
 	files := make([]ado.FileChange, 40)
 	for i := range files {
 		files[i] = ado.FileChange{Path: fmt.Sprintf("/src/file_%03d.go", i), ChangeType: "edit"}
 	}
-	m, _ = m.Update(filesLoadedMsg{files: files})
 
-	out := m.View()
-	if !strings.Contains(out, "acme/web") {
-		t.Fatalf("repo line missing from view:\n%s", out)
-	}
-	if !strings.Contains(out, "PR #7") {
-		t.Fatalf("PR title missing from view:\n%s", out)
-	}
-	if !strings.Contains(out, "● Files") && !strings.Contains(out, "○ Files") {
-		t.Fatalf("Files sub-header missing:\n%s", out)
-	}
-	// Total height should not exceed the pane height.
-	lineCount := strings.Count(out, "\n")
-	if lineCount > 26 {
-		t.Fatalf("rendered %d lines, exceeds pane height 26:\n%s", lineCount, out)
-	}
+	forEachPaneSize(t, func(t *testing.T, paneW, paneH int) {
+		m := NewDetail(DefaultKeys())
+		m = m.SetSummary(summary)
+		m, _ = m.Update(detailLoadedMsg{detail: &ado.PRDetail{PRSummary: summary, DescriptionMD: desc}})
+		m, _ = m.Update(filesLoadedMsg{files: files})
+		// Render through the same path production uses.
+		m = m.SetPaneSize(paneW, paneH)
+		out := m.ViewWithFocus(true)
+		assertHeaderVisible(t, out, summary, paneH)
+	})
 }
 
 func TestDetailWindowsLongFileListAroundCursor(t *testing.T) {
