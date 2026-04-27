@@ -194,17 +194,17 @@ func TestListDraftBadgeAlignsAcrossAges(t *testing.T) {
 	var c1, c2 int = -1, -1
 	for _, line := range strings.Split(out, "\n") {
 		if strings.Contains(line, "fresh") {
-			c1 = col(line, "[DRAFT]")
+			c1 = col(line, "DRAFT")
 		}
 		if strings.Contains(line, "old") {
-			c2 = col(line, "[DRAFT]")
+			c2 = col(line, "DRAFT")
 		}
 	}
 	if c1 < 0 || c2 < 0 {
 		t.Fatalf("could not locate DRAFT badge: c1=%d c2=%d\n%s", c1, c2, out)
 	}
 	if c1 != c2 {
-		t.Fatalf("[DRAFT] not aligned across age widths: fresh@col%d old@col%d\n%s", c1, c2, out)
+		t.Fatalf("DRAFT not aligned across age widths: fresh@col%d old@col%d\n%s", c1, c2, out)
 	}
 }
 

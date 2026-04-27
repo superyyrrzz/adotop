@@ -239,8 +239,9 @@ func (m ListModel) View() string {
 	} else if len(rows) == 0 {
 		b.WriteString(Faint.Render("No PRs in this tab.\n"))
 	} else {
-		header := fmt.Sprintf("%s %s %s %s   %s   %s",
+		header := fmt.Sprintf("%s %s %s %s %s   %s   %s",
 			padCols("ID", cols.id),
+			padCols("State", 10),
 			padCols("Title", cols.title),
 			padCols("Author", cols.author),
 			padCols("Source", cols.source),
@@ -251,16 +252,15 @@ func (m ListModel) View() string {
 		start, end := m.window(len(rows))
 		for i := start; i < end; i++ {
 			p := rows[i]
-			line := fmt.Sprintf("%s %s %s %s → %s   %s",
+			stateText, stateStyle := prStateBadgeCompact(p)
+			line := fmt.Sprintf("%s %s %s %s %s → %s   %s",
 				padCols(fmt.Sprintf("#%d", p.ID), cols.id),
+				stateStyle.Render(padCols(stateText, 10)),
 				truncCols(p.Title, cols.title),
 				truncCols(p.Author, cols.author),
 				truncCols(p.SourceBranch, cols.source),
 				truncCols(p.TargetBranch, cols.target),
 				padCols(age(p.CreatedAt), cols.age))
-			if badge := prStateBadge(p); badge != "" {
-				line += "  " + badge
-			}
 			if i == m.cursor {
 				line = Selected.Render(line)
 			}

@@ -760,7 +760,8 @@ func (m Model) prefetchOne(file ado.FileChange, key, sourceSha, targetSha string
 
 func (m Model) detailPreviewView() string {
 	layout := m.detailLayout()
-	left := m.detail.ViewWithFocus(m.detailFocus == focusFiles)
+	detail := m.detail.SetPaneSize(layout.leftWidth, layout.bodyHeight)
+	left := detail.ViewWithFocus(m.detailFocus == focusFiles)
 	right := m.previewPaneView()
 	if !layout.split {
 		return strings.Join([]string{left, "", right}, "\n")

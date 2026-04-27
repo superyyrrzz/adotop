@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/renzeyu/adotop/internal/ado"
 )
@@ -24,16 +25,18 @@ type statusesLoadedMsg struct {
 }
 
 type DetailModel struct {
-	keys     KeyMap
-	summary  ado.PRSummary
-	detail   *ado.PRDetail
-	files    []ado.FileChange
-	statuses []ado.StatusCheck
-	cursor   int
-	loadErr  string
-	width    int
-	height   int
-	myID     string
+	keys      KeyMap
+	summary   ado.PRSummary
+	detail    *ado.PRDetail
+	files     []ado.FileChange
+	statuses  []ado.StatusCheck
+	cursor    int
+	loadErr   string
+	width     int
+	height    int
+	paneWidth int // width of the left pane (set by parent); 0 = unknown
+	paneHeight int
+	myID      string
 }
 
 func NewDetail(keys KeyMap) DetailModel { return DetailModel{keys: keys} }
@@ -42,6 +45,15 @@ func NewDetail(keys KeyMap) DetailModel { return DetailModel{keys: keys} }
 // the caller's row with "(you)".
 func (m DetailModel) SetMyID(id string) DetailModel {
 	m.myID = id
+	return m
+}
+
+// SetPaneSize tells the detail model the actual rendered pane size so
+// it can wrap long description lines and budget the file list against
+// the visible area (not the full terminal height).
+func (m DetailModel) SetPaneSize(w, h int) DetailModel {
+	m.paneWidth = w
+	m.paneHeight = h
 	return m
 }
 
@@ -92,16 +104,46 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case keyMatches(msg, m.keys.Down):
-			if m.cursor < len(m.files)-1 {
-				m.cursor++
-			}
+			m.cursor = m.neighborFile(+1)
 		case keyMatches(msg, m.keys.Up):
-			if m.cursor > 0 {
-				m.cursor--
-			}
+			m.cursor = m.neighborFile(-1)
 		}
 	}
 	return m, nil
+}
+
+// neighborFile returns the file index that comes after (delta=+1) or
+// before (delta=-1) the current cursor when files are walked in
+// **display order** (the sorted/grouped tree). This keeps j/k in sync
+// with what the user sees instead of the original API order.
+func (m DetailModel) neighborFile(delta int) int {
+	if len(m.files) == 0 {
+		return m.cursor
+	}
+	rows := buildFileTree(m.files)
+	// Collect file rows in display order.
+	order := make([]int, 0, len(m.files))
+	for _, r := range rows {
+		if !r.isDir {
+			order = append(order, r.fileIdx)
+		}
+	}
+	// Find current cursor position in display order.
+	pos := 0
+	for i, idx := range order {
+		if idx == m.cursor {
+			pos = i
+			break
+		}
+	}
+	pos += delta
+	if pos < 0 {
+		pos = 0
+	}
+	if pos >= len(order) {
+		pos = len(order) - 1
+	}
+	return order[pos]
 }
 
 func (m DetailModel) View() string { return m.ViewWithFocus(true) }
@@ -114,7 +156,63 @@ func (m DetailModel) FilesHeader(focused bool) string {
 	return Header.Render(dot + "Files")
 }
 
+// effectiveHeight returns the pane height if set, else the terminal height.
+func (m DetailModel) effectiveHeight() int {
+	if m.paneHeight > 0 {
+		return m.paneHeight
+	}
+	return m.height
+}
+
+// effectiveWidth returns the pane width if set, else the terminal width.
+func (m DetailModel) effectiveWidth() int {
+	if m.paneWidth > 0 {
+		return m.paneWidth
+	}
+	return m.width
+}
+
 func (m DetailModel) ViewWithFocus(focused bool) string {
+	header := m.renderHeader(focused)
+	header = m.clampHeader(header)
+	filesBlock := m.renderFilesBlock(focused, lipgloss.Height(header))
+	return header + filesBlock
+}
+
+// clampHeader truncates the rendered header to the budget computed from
+// pane height. Description lines are the first thing trimmed (they're
+// the bulkiest); the title / repo / reviewer / files-sub-header chrome
+// is preserved. An ellipsis line marks the truncation.
+func (m DetailModel) clampHeader(header string) string {
+	h := m.effectiveHeight()
+	if h <= 0 {
+		return header
+	}
+	// Reserve at least 6 rows for the file list + 4 for footer/padding.
+	maxHeader := h - 10
+	if maxHeader < 6 {
+		maxHeader = 6
+	}
+	lines := strings.Split(header, "\n")
+	if len(lines) <= maxHeader {
+		return header
+	}
+	keep := maxHeader - 3
+	if keep < 1 {
+		keep = 1
+	}
+	tail := lines[len(lines)-2:]
+	out := append([]string{}, lines[:keep]...)
+	out = append(out, Faint.Render("  … (description truncated; press o to open in browser)"))
+	out = append(out, tail...)
+	return strings.Join(out, "\n")
+}
+
+// renderHeader returns the always-visible top section: title+badge,
+// repo/author/branch line, reviewers, description, work items, statuses,
+// and the "● Files" sub-header. This is rendered first and never
+// truncated, so the user always knows which PR they're looking at.
+func (m DetailModel) renderHeader(focused bool) string {
 	var b strings.Builder
 	s := m.summary
 	b.WriteString(Header.Render(fmt.Sprintf("PR #%d  %s", s.ID, s.Title)))
@@ -134,7 +232,7 @@ func (m DetailModel) ViewWithFocus(focused bool) string {
 	if m.detail != nil {
 		desc := strings.TrimSpace(m.detail.DescriptionMD)
 		if desc != "" {
-			lines := strings.Split(desc, "\n")
+			lines := wrapLines(strings.Split(desc, "\n"), m.effectiveWidth())
 			descCap := m.descCap()
 			if len(lines) > descCap {
 				lines = append(lines[:descCap], Faint.Render(fmt.Sprintf("… (%d more lines)", len(lines)-descCap)))
@@ -167,9 +265,19 @@ func (m DetailModel) ViewWithFocus(focused bool) string {
 	if m.loadErr != "" {
 		b.WriteString(ErrLine.Render(m.loadErr) + "\n")
 	}
+	return b.String()
+}
+
+// renderFilesBlock renders the (possibly windowed) file tree, sized to
+// whatever vertical space remains after the header. headerLines is the
+// measured height of renderHeader; we subtract it from m.height (with a
+// small safety margin) so the file list never pushes the header off the
+// top of the pane.
+func (m DetailModel) renderFilesBlock(_ bool, headerLines int) string {
+	var b strings.Builder
 	rows := buildFileTree(m.files)
 	cursorRow := rowIndexForFile(rows, m.cursor)
-	start, end := m.rowWindow(rows, cursorRow)
+	start, end := m.rowWindowFitting(rows, cursorRow, headerLines)
 	for i := start; i < end; i++ {
 		r := rows[i]
 		if r.isDir {
@@ -194,17 +302,16 @@ func (m DetailModel) ViewWithFocus(focused bool) string {
 }
 
 func (m DetailModel) descCap() int {
-	if m.height <= 0 {
+	h := m.effectiveHeight()
+	if h <= 0 {
 		return 8
 	}
-	// Grow with terminal height: roughly a third of the screen, with a
-	// generous ceiling so tall windows don't waste vertical space.
-	c := m.height / 3
+	c := h / 4
 	if c < 4 {
 		c = 4
 	}
-	if c > 40 {
-		c = 40
+	if c > 20 {
+		c = 20
 	}
 	return c
 }
@@ -216,6 +323,33 @@ func (m DetailModel) fileWindow() (int, int) {
 		return 0, 0
 	}
 	return 0, total
+}
+
+// wrapLines breaks each input line at width columns (rune-aware-ish; we
+// approximate with byte length since most ADO descriptions are ASCII).
+// This is what the lipgloss left-pane renderer will do anyway, so we
+// need to count the wrapped lines accurately when budgeting the file
+// list.
+func wrapLines(in []string, width int) []string {
+	if width <= 0 {
+		return in
+	}
+	var out []string
+	for _, line := range in {
+		// Strip ANSI for measurement? Description is plain markdown, so
+		// just count runes.
+		runes := []rune(line)
+		if len(runes) == 0 {
+			out = append(out, "")
+			continue
+		}
+		for len(runes) > width {
+			out = append(out, string(runes[:width]))
+			runes = runes[width:]
+		}
+		out = append(out, string(runes))
+	}
+	return out
 }
 
 // fileTreeRow is one rendered line in the file pane: either a directory
@@ -293,14 +427,42 @@ func rowIndexForFile(rows []fileTreeRow, fileIdx int) int {
 // keeping the parent directory header above the cursor in view when
 // possible.
 func (m DetailModel) rowWindow(rows []fileTreeRow, cursorRow int) (int, int) {
+	return m.rowWindowFitting(rows, cursorRow, 0)
+}
+
+// rowWindowFitting is like rowWindow but reserves headerLines for the
+// renderHeader block above. This guarantees the header stays on screen
+// even when the file list would otherwise overflow.
+//
+// The file list is also capped at roughly half the pane's height so the
+// PR description above doesn't get squeezed when there are many files.
+func (m DetailModel) rowWindowFitting(rows []fileTreeRow, cursorRow, headerLines int) (int, int) {
 	total := len(rows)
 	if total == 0 {
 		return 0, 0
 	}
-	if m.height <= 0 {
+	h := m.effectiveHeight()
+	if h <= 0 {
 		return 0, total
 	}
-	cap := m.height - m.descCap() - 12
+	// Reserve headerLines for the always-visible top section, plus a
+	// small footer/scrollbar/padding margin (4 rows).
+	cap := h - headerLines - 4
+	if headerLines == 0 {
+		// Legacy path (rowWindow caller): use the old descCap estimate.
+		cap = h - m.descCap() - 12
+	} else {
+		// Cap the file list at ~half the pane height so the description
+		// (rendered inside the header block above) stays readable. We
+		// never go below 6 rows so a tiny pane still shows a few files.
+		half := h / 2
+		if half < 6 {
+			half = 6
+		}
+		if cap > half {
+			cap = half
+		}
+	}
 	if cap < 3 {
 		cap = 3
 	}
@@ -337,6 +499,40 @@ func statusGlyph(state string) string {
 	default:
 		return None.Render("·")
 	}
+}
+
+// prStateBadgeCompact returns a short label and the lipgloss style to
+// color it with — separated so the caller can pad the plain text to a
+// fixed column width before applying ANSI escapes (runewidth doesn't
+// strip ANSI). Suitable for tabular list views.
+func prStateBadgeCompact(s ado.PRSummary) (string, lipgloss.Style) {
+	switch strings.ToLower(s.Status) {
+	case "completed":
+		return "MERGED", Approve
+	case "abandoned":
+		return "ABANDON", Reject
+	}
+	if s.Draft {
+		return "DRAFT", Wait
+	}
+	switch strings.ToLower(s.MergeStatus) {
+	case "conflicts":
+		return "CONFLICT", Reject
+	case "rejectedbypolicy":
+		return "BLOCKED", Reject
+	case "queued":
+		return "MERGING", Wait
+	case "failure":
+		return "FAILED", Reject
+	case "notset":
+		return "CHECKING", Wait
+	case "succeeded":
+		return "OPEN", Approve
+	}
+	if strings.ToLower(s.Status) == "active" || s.Status == "" {
+		return "OPEN", Faint
+	}
+	return strings.ToUpper(s.Status), Faint
 }
 
 // prStateBadge returns a short, colorized label summarizing the PR's
