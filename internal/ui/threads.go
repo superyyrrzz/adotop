@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/renzeyu/adotop/internal/ado"
 )
 
@@ -158,7 +156,7 @@ func renderThread(t ado.Thread, expand bool) string {
 	head := fmt.Sprintf("  %s %s  %s: %s",
 		bullet, Faint.Render(loc), Header.Render(first.Author), squeezeOneLine(first.Content, 200))
 	if t.IsResolved() {
-		head = lipgloss.NewStyle().Faint(true).Render(head)
+		head = Faint.Render(head)
 	}
 	b.WriteString(head)
 	if !expand && len(t.Comments) > 1 {

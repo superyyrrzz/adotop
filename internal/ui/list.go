@@ -276,10 +276,10 @@ func (m ListModel) View() string {
 	}
 
 	if m.filtering {
-		b.WriteString("\n/" + m.filter + lipgloss.NewStyle().Faint(true).Render("█"))
+		b.WriteString("\n/" + m.filter + Faint.Render("█"))
 	}
 	if m.jumping {
-		b.WriteString("\n#" + m.jumpInput + lipgloss.NewStyle().Faint(true).Render("█"))
+		b.WriteString("\n#" + m.jumpInput + Faint.Render("█"))
 	}
 	return b.String()
 }

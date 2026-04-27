@@ -17,6 +17,7 @@ import (
 	"github.com/renzeyu/adotop/internal/cache"
 	"github.com/renzeyu/adotop/internal/config"
 	"github.com/renzeyu/adotop/internal/gitlocal"
+	"github.com/renzeyu/adotop/internal/ui/theme"
 )
 
 type screen int
@@ -79,6 +80,9 @@ type pendingAction struct {
 }
 
 func New(cfg config.Config, client *ado.Client) Model {
+	// Resolve theme once at startup. ADOTOP_THEME can be "light",
+	// "dark", "auto", or empty (auto-detect from terminal background).
+	applyStyles(theme.New(os.Getenv("ADOTOP_THEME")))
 	keys := DefaultKeys()
 	m := Model{
 		cfg:      cfg,
@@ -841,7 +845,7 @@ func (m Model) detailPreviewView() string {
 		Render(left)
 	rightPane := lipgloss.NewStyle().
 		BorderLeft(true).
-		BorderForeground(lipgloss.Color("8")).
+		BorderForeground(PaneBorder).
 		PaddingLeft(1).
 		Width(layout.rightWidth).
 		MaxWidth(layout.rightWidth).
