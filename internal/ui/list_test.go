@@ -21,7 +21,7 @@ func samplePRs() []ado.PRSummary {
 
 func TestListRendersPRs(t *testing.T) {
 	m := NewList(DefaultKeys())
-	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: samplePRs()})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: samplePRs()})
 	out := m.View()
 	if !strings.Contains(out, "#1234") || !strings.Contains(out, "Fix login bug") {
 		t.Fatalf("missing PR row:\n%s", out)
@@ -33,7 +33,7 @@ func TestListRendersPRs(t *testing.T) {
 
 func TestListFilterNarrowsRows(t *testing.T) {
 	m := NewList(DefaultKeys())
-	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: samplePRs()})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: samplePRs()})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	for _, r := range "dark" {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -50,7 +50,7 @@ func TestListFilterNarrowsRows(t *testing.T) {
 func TestListColumnsAlignWithEllipsizedTitle(t *testing.T) {
 	m := NewList(DefaultKeys())
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
-	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: []ado.PRSummary{
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: []ado.PRSummary{
 		{ID: 1, Title: strings.Repeat("a", 60), Author: "alice", SourceBranch: "f", TargetBranch: "main"},
 		{ID: 2, Title: "short", Author: "bob", SourceBranch: "f", TargetBranch: "main"},
 	}})
@@ -84,7 +84,7 @@ func TestListAgeColumnAlignsAcrossVaryingBranchLengths(t *testing.T) {
 	now := time.Now()
 	m := NewList(DefaultKeys())
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
-	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: []ado.PRSummary{
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: []ado.PRSummary{
 		{ID: 1, Title: "t1", Author: "a", SourceBranch: "f", TargetBranch: "main", CreatedAt: now.Add(-2 * time.Hour)},
 		{ID: 2, Title: "t2", Author: "b", SourceBranch: "users/someone/very-long-feature-branch-name", TargetBranch: "release/2026.05", CreatedAt: now.Add(-3 * time.Hour)},
 	}})
@@ -126,7 +126,7 @@ func TestListAllColumnsAlignAcrossVaryingInputs(t *testing.T) {
 	}
 	m := NewList(DefaultKeys())
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 250, Height: 40})
-	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: prs})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: prs})
 
 	out := m.View()
 	rows := []string{}
@@ -179,7 +179,7 @@ func TestListDraftBadgeAlignsAcrossAges(t *testing.T) {
 	now := time.Now()
 	m := NewList(DefaultKeys())
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 250, Height: 40})
-	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: []ado.PRSummary{
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: []ado.PRSummary{
 		{ID: 1, Title: "fresh", Author: "a", SourceBranch: "f", TargetBranch: "main", CreatedAt: now.Add(-30 * time.Second), Draft: true},
 		{ID: 2, Title: "old", Author: "b", SourceBranch: "f", TargetBranch: "main", CreatedAt: now.Add(-9999 * 24 * time.Hour), Draft: true},
 	}})
@@ -211,7 +211,7 @@ func TestListDraftBadgeAlignsAcrossAges(t *testing.T) {
 func TestListShowsColumnHeadings(t *testing.T) {
 	m := NewList(DefaultKeys())
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
-	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: samplePRs()})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: samplePRs()})
 	out := m.View()
 	for _, h := range []string{"ID", "Title", "Author", "Source", "Target", "Age"} {
 		if !strings.Contains(out, h) {
@@ -232,8 +232,8 @@ func TestListNextTabEmitsLoad(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected a load cmd after tab switch")
 	}
-	if m.tab != ado.TabCreated {
-		t.Fatalf("tab = %v, want Created", m.tab)
+	if m.tab != ado.TabAssigned {
+		t.Fatalf("tab = %v, want Assigned", m.tab)
 	}
 }
 
@@ -249,7 +249,7 @@ func TestListWindowsLongListAroundCursor(t *testing.T) {
 	m := NewList(DefaultKeys())
 	// Tabs(1) + blank(1) + 2 lines per row. Height 14 ⇒ ~6 rows fit.
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 14})
-	m, _ = m.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: manyPRs(40)})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: manyPRs(40)})
 
 	out := m.View()
 	if !strings.Contains(out, "#1000") {

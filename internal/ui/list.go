@@ -215,10 +215,10 @@ func (m ListModel) updateFiltering(msg tea.KeyMsg) (ListModel, tea.Cmd) {
 func (m ListModel) View() string {
 	var b strings.Builder
 	tabs := []string{
+		ado.TabRecents.String(),
 		ado.TabAssigned.String(),
 		ado.TabCreated.String(),
 		ado.TabReviewRequested.String(),
-		ado.TabRecents.String(),
 	}
 	for i, name := range tabs {
 		count := len(m.prs[ado.Tab(i)])
@@ -232,6 +232,7 @@ func (m ListModel) View() string {
 	b.WriteString("\n\n")
 
 	rows := m.visible()
+	cols := m.colWidths()
 	if m.loadErr != "" {
 		b.WriteString(ErrLine.Render("error: " + m.loadErr))
 		b.WriteString("\n")
@@ -239,26 +240,26 @@ func (m ListModel) View() string {
 		b.WriteString(Faint.Render("No PRs in this tab.\n"))
 	} else {
 		header := fmt.Sprintf("%s %s %s %s   %s   %s",
-			padCols("ID", 8),
-			padCols("Title", 40),
-			padCols("Author", 14),
-			padCols("Source", 22),
-			padCols("Target", 18),
-			padCols("Age", 6))
+			padCols("ID", cols.id),
+			padCols("Title", cols.title),
+			padCols("Author", cols.author),
+			padCols("Source", cols.source),
+			padCols("Target", cols.target),
+			padCols("Age", cols.age))
 		b.WriteString(Faint.Render(header))
 		b.WriteString("\n")
 		start, end := m.window(len(rows))
 		for i := start; i < end; i++ {
 			p := rows[i]
 			line := fmt.Sprintf("%s %s %s %s → %s   %s",
-				padCols(fmt.Sprintf("#%d", p.ID), 8),
-				truncCols(p.Title, 40),
-				truncCols(p.Author, 14),
-				truncCols(p.SourceBranch, 22),
-				truncCols(p.TargetBranch, 18),
-				padCols(age(p.CreatedAt), 6))
-			if p.Draft {
-				line += "  [DRAFT]"
+				padCols(fmt.Sprintf("#%d", p.ID), cols.id),
+				truncCols(p.Title, cols.title),
+				truncCols(p.Author, cols.author),
+				truncCols(p.SourceBranch, cols.source),
+				truncCols(p.TargetBranch, cols.target),
+				padCols(age(p.CreatedAt), cols.age))
+			if badge := prStateBadge(p); badge != "" {
+				line += "  " + badge
 			}
 			if i == m.cursor {
 				line = Selected.Render(line)
@@ -281,6 +282,72 @@ func (m ListModel) View() string {
 		b.WriteString("\n#" + m.jumpInput + lipgloss.NewStyle().Faint(true).Render("█"))
 	}
 	return b.String()
+}
+
+// listCols holds the rendered widths of each column in the PR list.
+// Title is the elastic column — it absorbs slack space when the terminal
+// is wider than the minimum layout, and shrinks (down to a floor) when
+// the terminal is narrow.
+type listCols struct {
+	id, title, author, source, target, age int
+}
+
+func (m ListModel) colWidths() listCols {
+	// Defaults that work in narrow terminals (sum ~= 108, ignoring arrow/separators).
+	c := listCols{id: 8, title: 40, author: 14, source: 22, target: 18, age: 6}
+	if m.width <= 0 {
+		return c
+	}
+	// Account for the literal separators in the row format string:
+	// "%s %s %s %s → %s   %s" -> 1+1+1+3+3 = 9 chars of glue. Use 10 for safety.
+	const glue = 10
+	const minTitle = 20
+	avail := m.width - (c.id + c.author + c.source + c.target + c.age + glue)
+	if avail < minTitle {
+		// Squeeze in this order: target, source, author. Keep ID/age fixed.
+		need := minTitle - avail
+		for _, cap := range []struct {
+			pField *int
+			floor  int
+		}{
+			{&c.target, 10},
+			{&c.source, 12},
+			{&c.author, 8},
+		} {
+			if need <= 0 {
+				break
+			}
+			room := *cap.pField - cap.floor
+			if room <= 0 {
+				continue
+			}
+			cut := room
+			if cut > need {
+				cut = need
+			}
+			*cap.pField -= cut
+			need -= cut
+		}
+		avail = m.width - (c.id + c.author + c.source + c.target + c.age + glue)
+		if avail < 8 {
+			avail = 8
+		}
+		c.title = avail
+		return c
+	}
+	// Wide terminal: give title the slack, but also let source/target grow
+	// modestly so long branch names aren't always truncated.
+	c.title = avail
+	if c.title > 60 && c.source < 32 {
+		extra := (c.title - 60) / 4
+		if extra > 10 {
+			extra = 10
+		}
+		c.source += extra
+		c.target += extra
+		c.title -= 2 * extra
+	}
+	return c
 }
 
 func voteGlyphs(rs []ado.ReviewerVote) string {

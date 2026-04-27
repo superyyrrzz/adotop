@@ -11,22 +11,22 @@ import (
 type Tab int
 
 const (
-	TabAssigned Tab = iota
+	TabRecents Tab = iota
+	TabAssigned
 	TabCreated
 	TabReviewRequested
-	TabRecents
 )
 
 func (t Tab) String() string {
 	switch t {
+	case TabRecents:
+		return "Recents"
 	case TabAssigned:
 		return "Assigned to me"
 	case TabCreated:
 		return "Created by me"
 	case TabReviewRequested:
 		return "All reviewing"
-	case TabRecents:
-		return "Recents"
 	}
 	return "?"
 }
@@ -59,11 +59,16 @@ type PRSummary struct {
 	MyVote       int
 	Draft        bool
 	MergeStatus  string
+	// Status is the PR lifecycle state from ADO: "active", "completed",
+	// "abandoned", or "" if the server omitted it. Distinct from MergeStatus
+	// which describes whether ADO can merge ("succeeded"/"conflicts"/...).
+	Status string
 }
 
 type rawPR struct {
 	PullRequestID int    `json:"pullRequestId"`
 	Title         string `json:"title"`
+	Status        string `json:"status"`
 	SourceRefName string `json:"sourceRefName"`
 	TargetRefName string `json:"targetRefName"`
 	CreationDate  string `json:"creationDate"`
@@ -168,6 +173,7 @@ func toSummary(r rawPR, myID string) PRSummary {
 		URL:          r.Links.Web.Href,
 		Draft:        r.IsDraft,
 		MergeStatus:  r.MergeStatus,
+		Status:       r.Status,
 	}
 	for _, rv := range r.Reviewers {
 		s.Reviewers = append(s.Reviewers, ReviewerVote{

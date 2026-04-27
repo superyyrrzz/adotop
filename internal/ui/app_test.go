@@ -378,7 +378,7 @@ func TestOpeningPRRecordsRecentVisit(t *testing.T) {
 	}
 	m := newTestModel()
 	m.cache = st
-	m.list, _ = m.list.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: []ado.PRSummary{
+	m.list, _ = m.list.Update(prsLoadedMsg{tab: ado.TabRecents, prs: []ado.PRSummary{
 		{ID: 77, Title: "open me"},
 	}})
 

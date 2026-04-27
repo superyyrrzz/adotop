@@ -575,6 +575,18 @@ func (m Model) View() string {
 	} else if m.footerErr != "" {
 		footer = ErrLine.Render(m.footerErr)
 	}
+	// Pad the body so the footer sticks to the bottom of the terminal,
+	// regardless of how much content the current screen produced.
+	if m.height > 0 {
+		headerH := lipgloss.Height(header)
+		footerH := lipgloss.Height(footer)
+		bodyH := lipgloss.Height(body)
+		// 2 blank-line spacers between header/body and body/footer.
+		used := headerH + footerH + bodyH + 2
+		if pad := m.height - used; pad > 0 {
+			body = body + strings.Repeat("\n", pad)
+		}
+	}
 	return strings.Join([]string{header, "", body, "", footer}, "\n")
 }
 

@@ -117,6 +117,9 @@ func (m DetailModel) ViewWithFocus(focused bool) string {
 	var b strings.Builder
 	s := m.summary
 	b.WriteString(Header.Render(fmt.Sprintf("PR #%d  %s", s.ID, s.Title)))
+	if badge := prStateBadge(s); badge != "" {
+		b.WriteString("  " + badge)
+	}
 	b.WriteString("\n")
 	repo := s.Repo
 	if repo == "" {
@@ -186,12 +189,14 @@ func (m DetailModel) descCap() int {
 	if m.height <= 0 {
 		return 8
 	}
-	c := m.height / 4
+	// Grow with terminal height: roughly a third of the screen, with a
+	// generous ceiling so tall windows don't waste vertical space.
+	c := m.height / 3
 	if c < 4 {
 		c = 4
 	}
-	if c > 12 {
-		c = 12
+	if c > 40 {
+		c = 40
 	}
 	return c
 }
@@ -238,6 +243,43 @@ func statusGlyph(state string) string {
 	default:
 		return None.Render("·")
 	}
+}
+
+// prStateBadge returns a short, colorized label summarizing the PR's
+// lifecycle + draft + mergeability. Always returns a non-empty badge so
+// the user can see the state at a glance.
+//
+// Precedence: lifecycle (completed/abandoned) > draft > merge issue > active.
+func prStateBadge(s ado.PRSummary) string {
+	switch strings.ToLower(s.Status) {
+	case "completed":
+		return Approve.Render("[MERGED]")
+	case "abandoned":
+		return Reject.Render("[ABANDONED]")
+	}
+	if s.Draft {
+		return Wait.Render("[DRAFT]")
+	}
+	switch strings.ToLower(s.MergeStatus) {
+	case "conflicts":
+		return Reject.Render("[CONFLICTS]")
+	case "rejectedbypolicy":
+		return Reject.Render("[POLICY-BLOCKED]")
+	case "queued":
+		return Wait.Render("[MERGING]")
+	case "failure":
+		return Reject.Render("[MERGE-FAILED]")
+	case "notset":
+		return Wait.Render("[CHECKING]")
+	case "succeeded":
+		return Approve.Render("[READY]")
+	}
+	// Fall-through: PR is active but server hasn't reported a merge status
+	// yet (rare). Show "ACTIVE" rather than nothing.
+	if strings.ToLower(s.Status) == "active" || s.Status == "" {
+		return Faint.Render("[ACTIVE]")
+	}
+	return Faint.Render("[" + strings.ToUpper(s.Status) + "]")
 }
 
 // voteLabel maps an ADO reviewer vote integer to a (glyph, text) pair.
