@@ -90,6 +90,44 @@ func (s *Store) SaveList(org, project string, tab ado.Tab, prs []ado.PRSummary) 
 	return writeJSON(s.listPath(org, project, tab), ListSnapshot{Schema: schemaVersion, PRs: prs})
 }
 
+const recentsCap = 50
+
+type RecentsSnapshot struct {
+	Schema int             `json:"schema"`
+	PRs    []ado.PRSummary `json:"prs"`
+}
+
+func (s *Store) recentsPath() string { return filepath.Join(s.base, "recents.json") }
+
+func (s *Store) LoadRecents() ([]ado.PRSummary, bool) {
+	var snap RecentsSnapshot
+	if !readJSON(s.recentsPath(), &snap) || snap.Schema != schemaVersion {
+		return nil, false
+	}
+	return snap.PRs, true
+}
+
+// RecordVisit prepends pr to recents, removing any prior entry for the same
+// PR ID, then writes the truncated list back. Capped at recentsCap.
+func (s *Store) RecordVisit(pr ado.PRSummary) error {
+	if pr.ID == 0 {
+		return nil
+	}
+	cur, _ := s.LoadRecents()
+	out := make([]ado.PRSummary, 0, len(cur)+1)
+	out = append(out, pr)
+	for _, p := range cur {
+		if p.ID == pr.ID {
+			continue
+		}
+		out = append(out, p)
+		if len(out) >= recentsCap {
+			break
+		}
+	}
+	return writeJSON(s.recentsPath(), RecentsSnapshot{Schema: schemaVersion, PRs: out})
+}
+
 func readJSON(path string, out any) bool {
 	b, err := os.ReadFile(path)
 	if err != nil {
