@@ -262,6 +262,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.diff, cmd = m.diff.Update(msg)
 			return m, cmd
 		}
+	case prefetchLoadedMsg:
+		if msg.err == nil {
+			m.previewBodies[msg.key] = msg.content
+		} else {
+			delete(m.previewBodies, msg.key)
+		}
+		return m, nil
 	case tea.KeyMsg:
 		if keyMatches(msg, m.keys.Quit) {
 			return m, tea.Quit
@@ -481,10 +488,95 @@ func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
 		m.scrollMem[m.previewKey] = m.preview.vp.YOffset
 	}
 	m.previewKey = key
+
+	// Cache hit: render immediately (no async msg) and prefetch neighbors.
+	if body, ok := m.previewBodies[key]; ok && body != nil {
+		renderer := "rest"
+		if p, ok := m.git.Find(m.detail.Summary().Repo, m.cfg.Org); ok && p != "" {
+			if m.useDelta {
+				renderer = "local+delta"
+			} else {
+				renderer = "local"
+			}
+		}
+		m.preview = m.sizeDiffModel(m.preview.SetHeader(f.Path, renderer), diffTargetPreview)
+		m.previewReqID++
+		m.preview, _ = m.preview.Update(diffLoadedMsg{
+			content: body, target: diffTargetPreview, requestID: m.previewReqID,
+		})
+		if off, ok := m.scrollMem[key]; ok {
+			m.preview.vp.SetYOffset(off)
+		}
+		mm, prefetchCmd := m.prefetchNeighbors()
+		return mm, prefetchCmd
+	}
+
 	m.previewReqID++
 	pm, cmd := m.loadDiff(diffTargetPreview, m.preview, m.previewReqID, m.detail.Summary(), f, m.detail.Detail().SourceSha, m.detail.Detail().TargetSha)
 	m.preview = pm
-	return m, cmd
+	mm, prefetchCmd := m.prefetchNeighbors()
+	m = mm
+	return m, tea.Batch(cmd, prefetchCmd)
+}
+
+type prefetchLoadedMsg struct {
+	key     string
+	content []byte
+	err     error
+}
+
+func (m Model) prefetchNeighbors() (Model, tea.Cmd) {
+	if m.detail.Detail() == nil {
+		return m, nil
+	}
+	d := m.detail.Detail()
+	files := m.detail.files
+	cur := m.detail.cursor
+	var cmds []tea.Cmd
+	for _, idx := range []int{cur - 1, cur + 1} {
+		if idx < 0 || idx >= len(files) {
+			continue
+		}
+		f := files[idx]
+		key := diffSelectionKey(d.SourceSha, d.TargetSha, f.Path)
+		if _, ok := m.previewBodies[key]; ok {
+			continue
+		}
+		// Reserve cache slot (nil) so we don't re-issue while in flight.
+		m.previewBodies[key] = nil
+		cmds = append(cmds, m.prefetchOne(f, key, d.SourceSha, d.TargetSha))
+	}
+	if len(cmds) == 0 {
+		return m, nil
+	}
+	return m, tea.Batch(cmds...)
+}
+
+func (m Model) prefetchOne(file ado.FileChange, key, sourceSha, targetSha string) tea.Cmd {
+	s := m.detail.Summary()
+	var clonePath string
+	if p, ok := m.git.Find(s.Repo, m.cfg.Org); ok {
+		clonePath = p
+	}
+	useDelta := m.useDelta
+	repoID := s.RepoID
+	client := m.client
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if clonePath != "" {
+			out, err := gitlocal.Diff(ctx, clonePath, targetSha, sourceSha, strings.TrimPrefix(file.Path, "/"), useDelta)
+			return prefetchLoadedMsg{key: key, content: out, err: err}
+		}
+		if client == nil {
+			return prefetchLoadedMsg{key: key, err: nil, content: nil}
+		}
+		src, tgt, err := client.GetFileContents(ctx, repoID, file.Path, sourceSha, targetSha)
+		if err != nil {
+			return prefetchLoadedMsg{key: key, err: err}
+		}
+		return prefetchLoadedMsg{key: key, content: simpleDiff(tgt, src, file.Path)}
+	}
 }
 
 func (m Model) detailPreviewView() string {

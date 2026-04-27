@@ -265,3 +265,17 @@ func TestDetailRestoresPerFileScrollOffset(t *testing.T) {
 		t.Fatalf("expected /a.go scroll to be restored to %d, got %d", scrolledA, m.preview.vp.YOffset)
 	}
 }
+
+func TestDetailServesPrefetchedNeighborInstantly(t *testing.T) {
+	m := newDetailModel(t)
+	bKey := diffSelectionKey("src", "tgt", "/b.go")
+	m.previewBodies[bKey] = []byte("--- a/b.go\n+++ b/b.go\n+B\n")
+	m.preview = m.preview.SetSize(40, 10)
+
+	// Move to /b.go — cache hit should render synchronously.
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = mm.(Model)
+	if !strings.Contains(m.preview.vp.View(), "B") {
+		t.Fatalf("expected cached body to render immediately:\n%s", m.preview.vp.View())
+	}
+}
