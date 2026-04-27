@@ -338,7 +338,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if keyMatches(msg, m.keys.Quit) {
+		if keyMatches(msg, m.keys.QuitForce) {
 			return m, tea.Quit
 		}
 		if keyMatches(msg, m.keys.Help) {
@@ -373,6 +373,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) updateListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
+	case keyMatches(msg, m.keys.Quit):
+		return m, tea.Quit
 	case keyMatches(msg, m.keys.Open):
 		if s, ok := m.list.Selected(); ok {
 			m.detail = m.detail.SetSummary(s)
@@ -418,6 +420,12 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case keyMatches(msg, m.keys.Back):
+		m.screen = screenList
+		m.detailFocus = focusFiles
+		return m, nil
+	case keyMatches(msg, m.keys.Quit):
+		// On Detail, q acts like Back so a stray keystroke doesn't kill
+		// the program. ctrl+c still quits unconditionally.
 		m.screen = screenList
 		m.detailFocus = focusFiles
 		return m, nil
@@ -491,7 +499,7 @@ func (m Model) View() string {
 			"Help",
 			"",
 			"  ?           toggle this help",
-			"  q / ctrl+c  quit",
+			"  q           quit (list) / back (detail); ctrl+c always quits",
 			"  r           refresh current screen",
 			"  o           open in browser",
 			"  /           filter (list)",
@@ -517,7 +525,7 @@ func footerHints(s screen) string {
 	case screenList:
 		return "/:filter  enter:open  o:browser  r:refresh  tab:next  ?:help  q:quit"
 	case screenDetail:
-		return "tab:focus  n/N:file  ↑↓ pgup/pgdn g/G:scroll  a:approve  X:abandon  o:browser  esc:back  r:refresh  ?:help  q:quit"
+		return "tab:focus  n/N:file  ↑↓ pgup/pgdn g/G:scroll  a:approve  X:abandon  o:browser  esc/q:back  r:refresh  ?:help"
 	}
 	return ""
 }

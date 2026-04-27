@@ -10,6 +10,7 @@ type KeyMap struct {
 	Browser               key.Binding
 	Filter                key.Binding
 	Help, Quit            key.Binding
+	QuitForce             key.Binding
 	PgUp, PgDn            key.Binding
 	GotoTop, GotoEnd      key.Binding
 	NextFile, PrevFile    key.Binding
@@ -29,7 +30,8 @@ func DefaultKeys() KeyMap {
 		Browser:    key.NewBinding(key.WithKeys("o")),
 		Filter:     key.NewBinding(key.WithKeys("/")),
 		Help:       key.NewBinding(key.WithKeys("?")),
-		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c")),
+		Quit:       key.NewBinding(key.WithKeys("q")),
+		QuitForce:  key.NewBinding(key.WithKeys("ctrl+c")),
 		PgUp:       key.NewBinding(key.WithKeys("pgup")),
 		PgDn:       key.NewBinding(key.WithKeys("pgdown")),
 		GotoTop:    key.NewBinding(key.WithKeys("g")),

@@ -334,3 +334,35 @@ func TestDetailApproveFiresImmediately(t *testing.T) {
 		t.Fatalf("expected approve to return a command")
 	}
 }
+
+func TestQuitKeyOnDetailGoesBackNotQuit(t *testing.T) {
+	m := newDetailModel(t)
+	if m.screen != screenDetail {
+		t.Fatalf("setup: expected detail screen")
+	}
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = mm.(Model)
+	if cmd != nil {
+		t.Fatalf("q on detail should not return tea.Quit cmd")
+	}
+	if m.screen != screenList {
+		t.Fatalf("expected screen=list after q on detail, got %v", m.screen)
+	}
+}
+
+func TestQuitKeyOnListQuits(t *testing.T) {
+	m := newTestModel()
+	m.screen = screenList
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if cmd == nil {
+		t.Fatalf("q on list should quit (returning a tea.Cmd)")
+	}
+}
+
+func TestCtrlCAlwaysQuitsFromDetail(t *testing.T) {
+	m := newDetailModel(t)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatalf("ctrl+c on detail must always quit")
+	}
+}
