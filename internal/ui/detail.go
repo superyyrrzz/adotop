@@ -296,15 +296,8 @@ func (m DetailModel) renderHeader(focused bool) string {
 			b.WriteString("\n")
 		}
 	}
-	if len(m.statuses) > 0 {
-		b.WriteString("Status: ")
-		for i, st := range m.statuses {
-			if i > 0 {
-				b.WriteString("  ")
-			}
-			b.WriteString(st.Context + " " + statusGlyph(st.State))
-		}
-		b.WriteString("\n")
+	if block := renderStatusBlock(m.statuses); block != "" {
+		b.WriteString(block)
 	}
 	b.WriteString("\n" + m.FilesHeader(focused) + "\n")
 	if m.loadErr != "" {
@@ -540,6 +533,67 @@ func (m DetailModel) rowWindowFitting(rows []fileTreeRow, cursorRow, headerLines
 		start = cursorRow - cap + 1
 	}
 	return start, start + cap
+}
+
+// renderStatusBlock summarizes CI statuses as a one-line counts row
+// followed by a short list of the checks the user actually needs to act
+// on (failing, errored, in-progress/pending, unknown). Succeeded checks
+// are never named individually — an all-green PR collapses to a single
+// "Status: 12 ✓" row. Capped at maxDetail rows; overflow is summarized.
+//
+// Returns "" if there are no statuses, so the header omits the section.
+func renderStatusBlock(sts []ado.StatusCheck) string {
+	if len(sts) == 0 {
+		return ""
+	}
+	const maxDetail = 8
+	var ok, fail, pend, other int
+	type interesting struct {
+		state, ctx string
+	}
+	var picks []interesting
+	for _, s := range sts {
+		switch strings.ToLower(s.State) {
+		case "succeeded":
+			ok++
+		case "failed", "error":
+			fail++
+			picks = append(picks, interesting{s.State, s.Context})
+		case "pending":
+			pend++
+			picks = append(picks, interesting{s.State, s.Context})
+		default:
+			other++
+			picks = append(picks, interesting{s.State, s.Context})
+		}
+	}
+	var b strings.Builder
+	b.WriteString("Status:")
+	parts := []struct {
+		n     int
+		state string
+	}{
+		{ok, "succeeded"},
+		{fail, "failed"},
+		{pend, "pending"},
+		{other, ""},
+	}
+	for _, p := range parts {
+		if p.n == 0 {
+			continue
+		}
+		b.WriteString(fmt.Sprintf(" %d %s ", p.n, statusGlyph(p.state)))
+	}
+	b.WriteString("\n")
+	for i, p := range picks {
+		if i >= maxDetail {
+			b.WriteString(Faint.Render(fmt.Sprintf("  … (%d more)", len(picks)-maxDetail)))
+			b.WriteString("\n")
+			break
+		}
+		b.WriteString("  " + statusGlyph(strings.ToLower(p.state)) + " " + p.ctx + "\n")
+	}
+	return b.String()
 }
 
 func statusGlyph(state string) string {
