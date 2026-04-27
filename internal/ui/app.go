@@ -247,6 +247,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			var cmd tea.Cmd
 			m.preview, cmd = m.preview.Update(msg)
+			if msg.err == nil && m.previewKey != "" {
+				m.previewBodies[m.previewKey] = msg.content
+			}
+			if off, ok := m.scrollMem[m.previewKey]; ok {
+				m.preview.vp.SetYOffset(off)
+			}
 			return m, cmd
 		default:
 			if msg.requestID != m.diffReqID {
@@ -470,6 +476,9 @@ func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
 	key := diffSelectionKey(m.detail.Detail().SourceSha, m.detail.Detail().TargetSha, f.Path)
 	if key == m.previewKey {
 		return m, nil
+	}
+	if m.previewKey != "" {
+		m.scrollMem[m.previewKey] = m.preview.vp.YOffset
 	}
 	m.previewKey = key
 	m.previewReqID++

@@ -225,3 +225,43 @@ func TestDetailNextPrevFileInDiffFocus(t *testing.T) {
 		t.Fatalf("N should retreat file cursor, got %d", m.detail.cursor)
 	}
 }
+
+func TestDetailRestoresPerFileScrollOffset(t *testing.T) {
+	m := newDetailModel(t)
+	body := []byte(strings.Repeat("ctx\n", 200))
+	m.preview = m.preview.SetSize(40, 5)
+
+	// Land on /a.go and load its body.
+	mfocus, _ := m.queuePreviewForSelection()
+	m = mfocus
+	m.preview, _ = m.preview.Update(diffLoadedMsg{
+		content: body, target: diffTargetPreview, requestID: m.previewReqID,
+	})
+	// Scroll preview down on /a.go (simulate via SetYOffset).
+	m.preview.vp.SetYOffset(40)
+	scrolledA := m.preview.vp.YOffset
+	if scrolledA == 0 {
+		t.Fatalf("expected non-zero scroll on /a.go")
+	}
+
+	// Move to /b.go.
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = mm.(Model)
+	m.preview, _ = m.preview.Update(diffLoadedMsg{
+		content: body, target: diffTargetPreview, requestID: m.previewReqID,
+	})
+	if m.preview.vp.YOffset != 0 {
+		t.Fatalf("expected /b.go to start at top, got %d", m.preview.vp.YOffset)
+	}
+
+	// Back to /a.go — saved offset must be restored after the diff lands.
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	m = mm.(Model)
+	mm, _ = m.Update(diffLoadedMsg{
+		content: body, target: diffTargetPreview, requestID: m.previewReqID,
+	})
+	m = mm.(Model)
+	if m.preview.vp.YOffset != scrolledA {
+		t.Fatalf("expected /a.go scroll to be restored to %d, got %d", scrolledA, m.preview.vp.YOffset)
+	}
+}
