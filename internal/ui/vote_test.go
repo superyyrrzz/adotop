@@ -59,3 +59,34 @@ func TestVoteMenuUnknownKeyClosesWithoutAction(t *testing.T) {
 		t.Fatalf("unknown key should not produce a command")
 	}
 }
+
+// TestActionDoneOptimisticallyUpdatesMyVote: a successful vote
+// actionDoneMsg must flip MyVote on the local detail summary even when
+// the GET-side reviewer match would miss (simulated here by leaving
+// the reviewer slice empty). This is the "approved but UI still says
+// No vote" bug.
+func TestActionDoneOptimisticallyUpdatesMyVote(t *testing.T) {
+	m := newDetailModel(t)
+	m.myID = "me-uuid"
+	m.user = "Renze Yu"
+	prID := m.detail.Summary().ID
+	if m.detail.Summary().MyVote != 0 {
+		t.Fatalf("setup: MyVote should start 0")
+	}
+	mm, _ := m.Update(actionDoneMsg{kind: "vote", prID: prID, vote: 10, notes: "voted approve"})
+	m = mm.(Model)
+	if got := m.detail.Summary().MyVote; got != 10 {
+		t.Fatalf("after approve, MyVote want 10 got %d", got)
+	}
+	// And the reviewer row should exist so the Reviewers line renders
+	// the new vote, not "No vote".
+	found := false
+	for _, r := range m.detail.Summary().Reviewers {
+		if r.ID == "me-uuid" && r.Vote == 10 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected reviewer row with my vote, got %+v", m.detail.Summary().Reviewers)
+	}
+}

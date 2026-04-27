@@ -20,11 +20,20 @@ func TestNewExplicitLightReturnsLatte(t *testing.T) {
 	}
 }
 
-func TestNewUnknownFallsBackToMocha(t *testing.T) {
-	// Unknown values default to dark so we never crash on a typo.
+func TestNewUnknownFallsBackToSystem(t *testing.T) {
+	// Unknown values default to system so we never crash on a typo.
 	th := New("blueberry")
-	if th.Base != lipgloss.Color("#1e1e2e") {
-		t.Fatalf("unknown name should fall back to Mocha, got base %q", th.Base)
+	if th.Blue != lipgloss.Color("12") {
+		t.Fatalf("unknown name should fall back to system, got Blue %q", th.Blue)
+	}
+}
+
+func TestNewEmptyDefaultsToSystem(t *testing.T) {
+	// Empty (env unset) returns the system palette so users see the
+	// original look without configuring anything.
+	th := New("")
+	if th.Blue != lipgloss.Color("12") {
+		t.Fatalf("empty override should default to system, got Blue %q", th.Blue)
 	}
 }
 

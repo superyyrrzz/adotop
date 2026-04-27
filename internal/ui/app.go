@@ -139,10 +139,17 @@ type tickMsg time.Time
 
 // actionDoneMsg is the result of a write action (approve, abandon, etc.).
 type actionDoneMsg struct {
-	kind  string // "approve" | "abandon"
+	kind  string // "vote" | "abandon"
 	prID  int
 	err   error
 	notes string // optional human note shown on success ("voted approve")
+
+	// vote, when kind=="vote", is the vote value we just wrote (10/-10
+	// etc.). The detail screen uses this for an optimistic update
+	// because the round-trip GetPullRequest sometimes echoes the
+	// reviewer back under a different ID descriptor (e.g., the AAD
+	// group instead of the user) and our `rv.ID == myID` match misses.
+	vote int
 }
 
 // threadsLoadedMsg is the response from GetPullRequestThreads.
@@ -242,7 +249,7 @@ func (m Model) setVoteCurrent(vote int, label string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		err := m.client.SetReviewerVote(ctx, repoID, prID, m.myID, vote)
-		return actionDoneMsg{kind: "vote", prID: prID, err: err, notes: label}
+		return actionDoneMsg{kind: "vote", prID: prID, err: err, notes: label, vote: vote}
 	}
 }
 
@@ -399,6 +406,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.footerErr = fmt.Sprintf("PR #%d %s", msg.prID, msg.notes)
+		// Optimistic local update for votes: ADO sometimes echoes the
+		// reviewer back under a different identity descriptor (group vs
+		// user) so the GET-side `rv.ID == myID` match misses and the
+		// reviewer line still shows "No vote" after refresh. We KNOW the
+		// vote we just wrote succeeded, so write it locally too.
+		if msg.kind == "vote" && m.screen == screenDetail && m.detail.Summary().ID == msg.prID {
+			m.detail = m.detail.SetMyVote(msg.vote, m.myID, m.user)
+		}
 		// Refresh the detail in place so vote/status update; also bust the
 		// list cache for the active tab so the row reflects the change.
 		var cmds []tea.Cmd

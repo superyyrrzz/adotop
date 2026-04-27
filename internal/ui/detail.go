@@ -64,6 +64,36 @@ func (m DetailModel) SetMyID(id string) DetailModel {
 	return m
 }
 
+// SetMyVote optimistically updates the local summary's MyVote and
+// upserts the matching reviewer entry. Used right after a successful
+// SetReviewerVote so the UI reflects the new state without waiting for
+// (and trusting) the GetPullRequest round-trip — ADO sometimes echoes
+// the reviewer back under a different identity descriptor (group vs
+// user) which makes the GET-side ID match miss.
+//
+// myID/displayName let us locate the reviewer row to mutate. If no row
+// matches, we append one so the Reviewers list still reflects reality.
+func (m DetailModel) SetMyVote(vote int, myID, displayName string) DetailModel {
+	m.summary.MyVote = vote
+	found := false
+	for i := range m.summary.Reviewers {
+		r := &m.summary.Reviewers[i]
+		if (myID != "" && r.ID == myID) || (displayName != "" && r.DisplayName == displayName) {
+			r.Vote = vote
+			found = true
+		}
+	}
+	if !found && (myID != "" || displayName != "") {
+		m.summary.Reviewers = append(m.summary.Reviewers, ado.ReviewerVote{
+			ID: myID, DisplayName: displayName, Vote: vote,
+		})
+	}
+	if m.detail != nil {
+		m.detail.PRSummary = m.summary
+	}
+	return m
+}
+
 // SetPaneSize tells the detail model the actual rendered pane size so
 // it can wrap long description lines and budget the file list against
 // the visible area (not the full terminal height).

@@ -36,22 +36,28 @@ type Theme struct {
 //
 // override semantics:
 //
-//	"dark"          -> Mocha
-//	"light"         -> Latte
-//	"auto", ""      -> termenv.HasDarkBackground()
-//	anything else   -> Mocha (defensive: unknown values shouldn't crash)
+//	"system"        -> ANSI base-16 (uses your terminal's palette; default)
+//	"dark"          -> Catppuccin Mocha
+//	"light"         -> Catppuccin Latte
+//	"auto"          -> Mocha or Latte via termenv.HasDarkBackground()
+//	"" (unset)      -> system (the original look)
+//	anything else   -> system (defensive: unknown values shouldn't crash)
 func New(override string) Theme {
 	switch override {
+	case "system":
+		return newSystem()
 	case "dark":
 		return newCatppuccinMocha()
 	case "light":
 		return newCatppuccinLatte()
-	case "auto", "":
+	case "auto":
 		if termenv.HasDarkBackground() {
 			return newCatppuccinMocha()
 		}
 		return newCatppuccinLatte()
+	case "":
+		return newSystem()
 	default:
-		return newCatppuccinMocha()
+		return newSystem()
 	}
 }
