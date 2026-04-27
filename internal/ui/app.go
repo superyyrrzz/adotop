@@ -99,6 +99,9 @@ func New(cfg config.Config, client *ado.Client) Model {
 			}
 		}
 	}
+	if prs, ok := st.LoadRecents(); ok {
+		m.list, _ = m.list.Update(prsLoadedMsg{tab: ado.TabRecents, prs: prs})
+	}
 	return m
 }
 
@@ -135,6 +138,15 @@ func (m Model) fetchConnectionData() tea.Cmd {
 }
 
 func (m Model) loadList(tab ado.Tab) tea.Cmd {
+	if tab == ado.TabRecents {
+		var prs []ado.PRSummary
+		if m.cache != nil {
+			prs, _ = m.cache.LoadRecents()
+		}
+		return func() tea.Msg {
+			return prsLoadedMsg{tab: ado.TabRecents, prs: prs}
+		}
+	}
 	if m.myID == "" || m.cfg.Project == "" {
 		return nil
 	}
@@ -265,7 +277,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tabSwitchedMsg:
 		return m, m.loadList(msg.Tab)
 	case prsLoadedMsg:
-		if msg.err == nil && m.cache != nil && m.cfg.Org != "" && m.cfg.Project != "" {
+		if msg.err == nil && m.cache != nil && m.cfg.Org != "" && m.cfg.Project != "" && msg.tab != ado.TabRecents {
 			if err := m.cache.SaveList(m.cfg.Org, m.cfg.Project, msg.tab, msg.prs); err != nil {
 				slog.Warn("cache: save list", "tab", msg.tab, "err", err)
 			}

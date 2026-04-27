@@ -132,11 +132,11 @@ func (m ListModel) Update(msg tea.Msg) (ListModel, tea.Cmd) {
 		}
 		switch {
 		case keyMatches(msg, m.keys.NextTab):
-			m.tab = (m.tab + 1) % 3
+			m.tab = (m.tab + 1) % 4
 			m.cursor = 0
 			return m, tabSwitchCmd(m.tab)
 		case keyMatches(msg, m.keys.PrevTab):
-			m.tab = (m.tab + 2) % 3
+			m.tab = (m.tab + 3) % 4
 			m.cursor = 0
 			return m, tabSwitchCmd(m.tab)
 		case keyMatches(msg, m.keys.Down):
@@ -176,7 +176,12 @@ func (m ListModel) updateFiltering(msg tea.KeyMsg) (ListModel, tea.Cmd) {
 
 func (m ListModel) View() string {
 	var b strings.Builder
-	tabs := []string{ado.TabAssigned.String(), ado.TabCreated.String(), ado.TabReviewRequested.String()}
+	tabs := []string{
+		ado.TabAssigned.String(),
+		ado.TabCreated.String(),
+		ado.TabReviewRequested.String(),
+		ado.TabRecents.String(),
+	}
 	for i, name := range tabs {
 		count := len(m.prs[ado.Tab(i)])
 		label := fmt.Sprintf(" %s (%d) ", name, count)
