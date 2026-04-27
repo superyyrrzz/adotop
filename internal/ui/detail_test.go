@@ -21,7 +21,7 @@ func TestDetailRendersDescriptionAndFiles(t *testing.T) {
 	if !strings.Contains(out, "Fix login bug") || !strings.Contains(out, "session tokens") {
 		t.Fatalf("missing description:\n%s", out)
 	}
-	if !strings.Contains(out, "/src/login.go") {
+	if !strings.Contains(out, "src/") || !strings.Contains(out, "login.go") {
 		t.Fatalf("missing file:\n%s", out)
 	}
 }

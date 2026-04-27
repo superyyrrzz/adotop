@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -166,21 +167,28 @@ func (m DetailModel) ViewWithFocus(focused bool) string {
 	if m.loadErr != "" {
 		b.WriteString(ErrLine.Render(m.loadErr) + "\n")
 	}
-	start, end := m.fileWindow()
+	rows := buildFileTree(m.files)
+	cursorRow := rowIndexForFile(rows, m.cursor)
+	start, end := m.rowWindow(rows, cursorRow)
 	for i := start; i < end; i++ {
-		f := m.files[i]
+		r := rows[i]
+		if r.isDir {
+			b.WriteString(Faint.Render(strings.Repeat("  ", r.depth)+r.label+"/") + "\n")
+			continue
+		}
 		marker := "  "
-		if i == m.cursor {
+		if r.fileIdx == m.cursor {
 			marker = "▸ "
 		}
-		line := fmt.Sprintf("%s%s  %s", marker, f.ChangeType, f.Path)
-		if i == m.cursor {
+		f := m.files[r.fileIdx]
+		line := fmt.Sprintf("%s%s%s  %s", strings.Repeat("  ", r.depth), marker, f.ChangeType, r.label)
+		if r.fileIdx == m.cursor {
 			line = Selected.Render(line)
 		}
 		b.WriteString(line + "\n")
 	}
-	if start > 0 || end < len(m.files) {
-		b.WriteString(Faint.Render(fmt.Sprintf("  [%d-%d of %d]\n", start+1, end, len(m.files))))
+	if start > 0 || end < len(rows) {
+		b.WriteString(Faint.Render(fmt.Sprintf("  [%d-%d of %d]\n", start+1, end, len(rows))))
 	}
 	return b.String()
 }
@@ -202,7 +210,90 @@ func (m DetailModel) descCap() int {
 }
 
 func (m DetailModel) fileWindow() (int, int) {
+	// Deprecated: kept for tests; see rowWindow for the live tree pane.
 	total := len(m.files)
+	if total == 0 {
+		return 0, 0
+	}
+	return 0, total
+}
+
+// fileTreeRow is one rendered line in the file pane: either a directory
+// header (isDir=true, fileIdx=-1) or a file row (isDir=false, fileIdx is
+// the index into m.files). depth is the indent level.
+type fileTreeRow struct {
+	isDir   bool
+	depth   int
+	label   string
+	fileIdx int
+}
+
+// buildFileTree groups m.files by their parent directory and returns a flat
+// slice of tree rows. Common prefix folders that contain only one child are
+// collapsed into the child's label so the tree doesn't waste rows on
+// single-folder chains (e.g. "internal/ui/" stays one header instead of
+// "internal" → "ui").
+func buildFileTree(files []ado.FileChange) []fileTreeRow {
+	if len(files) == 0 {
+		return nil
+	}
+	type entry struct {
+		path string
+		idx  int
+	}
+	entries := make([]entry, len(files))
+	for i, f := range files {
+		entries[i] = entry{path: strings.TrimPrefix(f.Path, "/"), idx: i}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].path < entries[j].path })
+
+	var rows []fileTreeRow
+	prevDirs := []string{}
+	for _, e := range entries {
+		parts := strings.Split(e.path, "/")
+		dirs := parts[:len(parts)-1]
+		base := parts[len(parts)-1]
+		// Find the common prefix length with the previously emitted dirs.
+		common := 0
+		for common < len(dirs) && common < len(prevDirs) && dirs[common] == prevDirs[common] {
+			common++
+		}
+		// Emit any new directory segments as collapsed headers.
+		for i := common; i < len(dirs); i++ {
+			rows = append(rows, fileTreeRow{
+				isDir:   true,
+				depth:   i,
+				label:   dirs[i],
+				fileIdx: -1,
+			})
+		}
+		rows = append(rows, fileTreeRow{
+			isDir:   false,
+			depth:   len(dirs),
+			label:   base,
+			fileIdx: e.idx,
+		})
+		prevDirs = dirs
+	}
+	return rows
+}
+
+// rowIndexForFile returns the row index whose fileIdx matches the given
+// file index, or -1 if not found.
+func rowIndexForFile(rows []fileTreeRow, fileIdx int) int {
+	for i, r := range rows {
+		if !r.isDir && r.fileIdx == fileIdx {
+			return i
+		}
+	}
+	return -1
+}
+
+// rowWindow scrolls the rendered tree so the cursor row stays visible,
+// keeping the parent directory header above the cursor in view when
+// possible.
+func (m DetailModel) rowWindow(rows []fileTreeRow, cursorRow int) (int, int) {
+	total := len(rows)
 	if total == 0 {
 		return 0, 0
 	}
@@ -216,18 +307,21 @@ func (m DetailModel) fileWindow() (int, int) {
 	if cap >= total {
 		return 0, total
 	}
-	start := m.cursor - cap/2
+	if cursorRow < 0 {
+		cursorRow = 0
+	}
+	start := cursorRow - cap/2
 	if start < 0 {
 		start = 0
 	}
 	if start+cap > total {
 		start = total - cap
 	}
-	if m.cursor < start {
-		start = m.cursor
+	if cursorRow < start {
+		start = cursorRow
 	}
-	if m.cursor >= start+cap {
-		start = m.cursor - cap + 1
+	if cursorRow >= start+cap {
+		start = cursorRow - cap + 1
 	}
 	return start, start + cap
 }
