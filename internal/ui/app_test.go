@@ -126,7 +126,6 @@ func newTestModel() Model {
 		git:           gitlocal.New(nil),
 		list:          NewList(keys),
 		detail:        NewDetail(keys),
-		diff:          NewDiff(keys),
 		preview:       NewDiff(keys),
 		scrollMem:     map[string]int{},
 		previewBodies: map[string][]byte{},

@@ -22,7 +22,6 @@ type screen int
 const (
 	screenList screen = iota
 	screenDetail
-	screenDiff
 )
 
 type detailFocus int
@@ -45,7 +44,6 @@ type Model struct {
 
 	list    ListModel
 	detail  DetailModel
-	diff    DiffModel
 	preview DiffModel
 
 	width, height int
@@ -53,7 +51,6 @@ type Model struct {
 	showHelp      bool
 	useDelta      bool
 	previewReqID  int
-	diffReqID     int
 	previewKey    string
 	detailFocus   detailFocus
 	scrollMem     map[string]int
@@ -67,10 +64,9 @@ func New(cfg config.Config, client *ado.Client) Model {
 		client:   client,
 		git:      gitlocal.New(cfg.RepoRoots),
 		keys:     keys,
-		list:     NewList(keys),
-		detail:   NewDetail(keys),
-		diff:     NewDiff(keys),
-		preview:  NewDiff(keys),
+		list:          NewList(keys),
+		detail:        NewDetail(keys),
+		preview:       NewDiff(keys),
 		user:          "loading…",
 		useDelta:      gitlocal.HasDelta(),
 		scrollMem:     map[string]int{},
@@ -192,7 +188,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var c1, c2 tea.Cmd
 		m.list, c1 = m.list.Update(msg)
 		m.detail, c2 = m.detail.Update(msg)
-		m.diff = m.sizeDiffModel(m.diff, diffTargetFull)
 		m.preview = m.sizeDiffModel(m.preview, diffTargetPreview)
 		return m, tea.Batch(c1, c2)
 	case connDataMsg:
@@ -240,28 +235,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail, cmd = m.detail.Update(msg)
 		return m, cmd
 	case diffLoadedMsg:
-		switch msg.target {
-		case diffTargetPreview:
-			if msg.requestID != m.previewReqID {
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.preview, cmd = m.preview.Update(msg)
-			if msg.err == nil && m.previewKey != "" {
-				m.previewBodies[m.previewKey] = msg.content
-			}
-			if off, ok := m.scrollMem[m.previewKey]; ok {
-				m.preview.vp.SetYOffset(off)
-			}
-			return m, cmd
-		default:
-			if msg.requestID != m.diffReqID {
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.diff, cmd = m.diff.Update(msg)
-			return m, cmd
+		if msg.target != diffTargetPreview {
+			return m, nil
 		}
+		if msg.requestID != m.previewReqID {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.preview, cmd = m.preview.Update(msg)
+		if msg.err == nil && m.previewKey != "" {
+			m.previewBodies[m.previewKey] = msg.content
+		}
+		if off, ok := m.scrollMem[m.previewKey]; ok {
+			m.preview.vp.SetYOffset(off)
+		}
+		return m, cmd
 	case prefetchLoadedMsg:
 		if msg.err == nil {
 			m.previewBodies[msg.key] = msg.content
@@ -288,8 +276,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateListScreen(msg)
 		case screenDetail:
 			return m.updateDetailScreen(msg)
-		case screenDiff:
-			return m.updateDiffScreen(msg)
 		}
 	}
 	switch m.screen {
@@ -300,10 +286,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screenDetail:
 		var cmd tea.Cmd
 		m.detail, cmd = m.detail.Update(msg)
-		return m, cmd
-	case screenDiff:
-		var cmd tea.Cmd
-		m.diff, cmd = m.diff.Update(msg)
 		return m, cmd
 	}
 	return m, nil
@@ -355,23 +337,6 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenList
 		m.detailFocus = focusFiles
 		return m, nil
-	case keyMatches(msg, m.keys.Open):
-		f, ok := m.detail.SelectedFile()
-		if !ok || m.detail.Detail() == nil {
-			return m, nil
-		}
-		key := diffSelectionKey(m.detail.Detail().SourceSha, m.detail.Detail().TargetSha, f.Path)
-		if key == m.previewKey && m.preview.loaded {
-			m.diff = m.sizeDiffModel(m.preview, diffTargetFull)
-			m.diff.vp.GotoTop()
-			m.screen = screenDiff
-			return m, nil
-		}
-		m.diffReqID++
-		dm, cmd := m.loadDiff(diffTargetFull, m.diff, m.diffReqID, m.detail.Summary(), f, m.detail.Detail().SourceSha, m.detail.Detail().TargetSha)
-		m.diff = dm
-		m.screen = screenDiff
-		return m, cmd
 	case keyMatches(msg, m.keys.Refresh):
 		m.preview = m.sizeDiffModel(NewDiff(m.keys), diffTargetPreview)
 		m.previewKey = ""
@@ -410,20 +375,6 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) updateDiffScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case keyMatches(msg, m.keys.Back):
-		m.screen = screenDetail
-		return m, nil
-	case keyMatches(msg, m.keys.Browser):
-		OpenInBrowser(m.detail.Summary().URL)
-		return m, nil
-	}
-	var cmd tea.Cmd
-	m.diff, cmd = m.diff.Update(msg)
-	return m, cmd
-}
-
 func (m Model) View() string {
 	header := Header.Render(fmt.Sprintf("adotop  %s/%s  user=%s", orPlaceholder(m.cfg.Org, "(no org)"), orPlaceholder(m.cfg.Project, "(no project)"), m.user))
 	var body string
@@ -432,8 +383,6 @@ func (m Model) View() string {
 		body = m.list.View()
 	case screenDetail:
 		body = m.detailPreviewView()
-	case screenDiff:
-		body = m.diff.View()
 	}
 	if m.showHelp {
 		body = HelpBox.Render(strings.Join([]string{
@@ -444,13 +393,10 @@ func (m Model) View() string {
 			"  r           refresh current screen",
 			"  o           open in browser",
 			"  /           filter (list)",
-			"  tab / l     next tab",
-			"  shift+tab/h prev tab",
-			"  enter       open selected / full diff",
+			"  tab/shift+tab  switch focus (Detail)",
+			"  n / N       next / prev file (Detail)",
+			"  ↑↓ pgup/pgdn g/G  scroll focused pane",
 			"  esc         back",
-			"  ↑↓          move files + auto-preview",
-			"  pgup/pgdn   scroll preview/diff",
-			"  g / G       top / bottom (preview/diff)",
 		}, "\n"))
 	}
 	footer := Footer.Render(footerHints(m.screen))
@@ -465,9 +411,7 @@ func footerHints(s screen) string {
 	case screenList:
 		return "/:filter  enter:open  o:browser  r:refresh  tab:next  ?:help  q:quit"
 	case screenDetail:
-		return "↑↓:files  pgup/pgdn g/G:preview  enter:full diff  o:browser  esc:back  r:refresh  ?:help  q:quit"
-	case screenDiff:
-		return "↑↓ pgup/pgdn g/G:scroll  esc:back  o:browser  ?:help  q:quit"
+		return "tab:focus  n/N:file  ↑↓ pgup/pgdn g/G:scroll  o:browser  esc:back  r:refresh  ?:help  q:quit"
 	}
 	return ""
 }
