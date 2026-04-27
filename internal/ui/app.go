@@ -817,8 +817,14 @@ func (m Model) detailLayout() previewLayout {
 		layout.rightWidth = m.width
 		return layout
 	}
-	left := m.width * 2 / 5
-	left = maxInt(36, minInt(left, m.width-40))
+	// File list takes ~28% of the width (capped 32–60 cols) so the diff
+	// pane on the right gets the lion's share. Most file paths fit in
+	// ~40 cols; the right pane benefits more from extra width.
+	left := m.width * 28 / 100
+	left = maxInt(32, minInt(left, 60))
+	if left > m.width-50 {
+		left = m.width - 50
+	}
 	right := maxInt(30, m.width-left-1)
 	if right < 30 {
 		layout.leftWidth = m.width
