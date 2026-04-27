@@ -383,20 +383,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// openDetail switches to the Detail screen for s, records the visit in the
+// recents cache, and returns the load command. Idempotent: caller may call
+// from list, recents tab, or ID-jump.
+func (m Model) openDetail(s ado.PRSummary) (Model, tea.Cmd) {
+	m.detail = m.detail.SetSummary(s)
+	m.preview = m.sizeDiffModel(NewDiff(m.keys), diffTargetPreview)
+	m.previewKey = ""
+	m.detailFocus = focusFiles
+	m.scrollMem = map[string]int{}
+	m.previewBodies = map[string][]byte{}
+	m.screen = screenDetail
+	if m.cache != nil {
+		if err := m.cache.RecordVisit(s); err != nil {
+			slog.Warn("cache: record visit", "pr", s.ID, "err", err)
+		}
+		if recents, ok := m.cache.LoadRecents(); ok {
+			m.list, _ = m.list.Update(prsLoadedMsg{tab: ado.TabRecents, prs: recents})
+		}
+	}
+	return m, m.loadDetail(s)
+}
+
 func (m Model) updateListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case keyMatches(msg, m.keys.Quit):
 		return m, tea.Quit
 	case keyMatches(msg, m.keys.Open):
 		if s, ok := m.list.Selected(); ok {
-			m.detail = m.detail.SetSummary(s)
-			m.preview = m.sizeDiffModel(NewDiff(m.keys), diffTargetPreview)
-			m.previewKey = ""
-			m.detailFocus = focusFiles
-			m.scrollMem = map[string]int{}
-			m.previewBodies = map[string][]byte{}
-			m.screen = screenDetail
-			return m, m.loadDetail(s)
+			mm, cmd := m.openDetail(s)
+			return mm, cmd
 		}
 	case keyMatches(msg, m.keys.Refresh):
 		return m, m.loadList(m.list.Tab())

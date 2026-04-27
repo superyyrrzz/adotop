@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/renzeyu/adotop/internal/cache"
 	"github.com/renzeyu/adotop/internal/gitlocal"
 )
 
@@ -364,5 +365,28 @@ func TestCtrlCAlwaysQuitsFromDetail(t *testing.T) {
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if cmd == nil {
 		t.Fatalf("ctrl+c on detail must always quit")
+	}
+}
+
+func TestOpeningPRRecordsRecentVisit(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	st, err := cache.New()
+	if err != nil {
+		t.Fatalf("cache.New: %v", err)
+	}
+	m := newTestModel()
+	m.cache = st
+	m.list, _ = m.list.Update(prsLoadedMsg{tab: ado.TabAssigned, prs: []ado.PRSummary{
+		{ID: 77, Title: "open me"},
+	}})
+
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mm.(Model)
+
+	got, ok := st.LoadRecents()
+	if !ok || len(got) != 1 || got[0].ID != 77 {
+		t.Fatalf("expected recents=[77], got ok=%v list=%+v", ok, got)
 	}
 }
