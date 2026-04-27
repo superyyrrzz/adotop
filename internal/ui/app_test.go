@@ -168,3 +168,36 @@ func TestDetailTabTogglesFocus(t *testing.T) {
 		t.Fatalf("shift+tab should switch back to focusFiles, got %v", m.detailFocus)
 	}
 }
+
+func TestDetailDiffFocusRoutesScrollKeys(t *testing.T) {
+	m := newDetailModel(t)
+	// Pre-fill preview with multi-line content so PgDn moves the offset.
+	m.preview = m.preview.SetSize(40, 5)
+	m.preview, _ = m.preview.Update(diffLoadedMsg{
+		content:   []byte(strings.Repeat("ctx\n", 200)),
+		target:    diffTargetPreview,
+		requestID: m.previewReqID,
+	})
+
+	// In files focus, PgDn must NOT scroll the preview.
+	beforeOffset := m.preview.vp.YOffset
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = mm.(Model)
+	if m.preview.vp.YOffset != beforeOffset {
+		t.Fatalf("preview should not scroll in files focus; offset went %d -> %d", beforeOffset, m.preview.vp.YOffset)
+	}
+
+	// Switch to diff focus; PgDn must scroll preview.
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = mm.(Model)
+	cursorAfterTab := m.detail.cursor
+	offsetBefore := m.preview.vp.YOffset
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = mm.(Model)
+	if m.detail.cursor != cursorAfterTab {
+		t.Fatalf("file cursor must not move when diff has focus")
+	}
+	if m.preview.vp.YOffset == offsetBefore {
+		t.Fatalf("preview should have scrolled in diff focus")
+	}
+}

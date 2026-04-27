@@ -9,9 +9,18 @@ import (
 )
 
 type diffLoadedMsg struct {
-	content []byte
-	err     error
+	content   []byte
+	err       error
+	target    diffTarget
+	requestID int
 }
+
+type diffTarget int
+
+const (
+	diffTargetFull diffTarget = iota
+	diffTargetPreview
+)
 
 type DiffModel struct {
 	keys     KeyMap
@@ -25,6 +34,18 @@ type DiffModel struct {
 func NewDiff(keys KeyMap) DiffModel {
 	vp := viewport.New(80, 20)
 	return DiffModel{keys: keys, vp: vp}
+}
+
+func (m DiffModel) SetSize(width, height int) DiffModel {
+	if width < 1 {
+		width = 1
+	}
+	if height < 1 {
+		height = 1
+	}
+	m.vp.Width = width
+	m.vp.Height = height
+	return m
 }
 
 func (m DiffModel) SetHeader(file, renderer string) DiffModel {

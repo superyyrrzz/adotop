@@ -362,11 +362,14 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyMatches(msg, m.keys.Refresh):
 		m.preview = m.sizeDiffModel(NewDiff(m.keys), diffTargetPreview)
 		m.previewKey = ""
+		m.scrollMem = map[string]int{}
+		m.previewBodies = map[string][]byte{}
 		return m, m.loadDetail(m.detail.Summary())
 	case keyMatches(msg, m.keys.Browser):
 		OpenInBrowser(m.detail.Summary().URL)
 		return m, nil
-	case keyMatches(msg, m.keys.PgUp), keyMatches(msg, m.keys.PgDn), keyMatches(msg, m.keys.GotoTop), keyMatches(msg, m.keys.GotoEnd):
+	}
+	if m.detailFocus == focusDiff {
 		var cmd tea.Cmd
 		m.preview, cmd = m.preview.Update(msg)
 		return m, cmd

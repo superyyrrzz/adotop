@@ -21,8 +21,11 @@ func TestColorizeDiffMarksAddDelete(t *testing.T) {
 	if !strings.Contains(minus, "\x1b[31") {
 		t.Fatalf("- line missing red:\n%q", minus)
 	}
+	if !strings.Contains(plus, "\x1b[42m") || !strings.Contains(minus, "\x1b[41m") {
+		t.Fatalf("missing highlighted gutter bar:\n%q\n%q", plus, minus)
+	}
 	if !strings.Contains(plus, "▌") || !strings.Contains(minus, "▌") {
-		t.Fatalf("missing gutter bar:\n%q\n%q", plus, minus)
+		t.Fatalf("missing bar glyph:\n%q\n%q", plus, minus)
 	}
 	if !strings.Contains(hunk, "\x1b[36") {
 		t.Fatalf("hunk header missing cyan:\n%q", hunk)

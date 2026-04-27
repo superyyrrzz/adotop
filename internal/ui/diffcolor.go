@@ -12,10 +12,13 @@ const (
 	ansiGreen    = "\x1b[32m"
 	ansiCyan     = "\x1b[36m"
 	ansiDim      = "\x1b[2m"
-	addBar       = "\x1b[32m▌\x1b[0m "
-	deleteBar    = "\x1b[31m▌\x1b[0m "
-	contextBar   = "  "
-	hunkBar      = "\x1b[36m▌\x1b[0m "
+	ansiRedBg    = "\x1b[41m"
+	ansiGreenBg  = "\x1b[42m"
+	ansiCyanBg   = "\x1b[46m"
+	addBar       = ansiGreenBg + " " + ansiReset + ansiGreen + "▌" + ansiReset + " "
+	deleteBar    = ansiRedBg + " " + ansiReset + ansiRed + "▌" + ansiReset + " "
+	contextBar   = "   "
+	hunkBar      = ansiCyanBg + " " + ansiReset + ansiCyan + "▌" + ansiReset + " "
 	headerEscape = "\x1b["
 )
 
@@ -48,16 +51,19 @@ func Colorize(in []byte) []byte {
 			out.WriteString(ansiReset)
 		case strings.HasPrefix(body, "@@"):
 			out.WriteString(hunkBar)
+			out.WriteString(ansiBold)
 			out.WriteString(ansiCyan)
 			out.WriteString(body)
 			out.WriteString(ansiReset)
 		case strings.HasPrefix(body, "+"):
 			out.WriteString(addBar)
+			out.WriteString(ansiBold)
 			out.WriteString(ansiGreen)
 			out.WriteString(body)
 			out.WriteString(ansiReset)
 		case strings.HasPrefix(body, "-"):
 			out.WriteString(deleteBar)
+			out.WriteString(ansiBold)
 			out.WriteString(ansiRed)
 			out.WriteString(body)
 			out.WriteString(ansiReset)
