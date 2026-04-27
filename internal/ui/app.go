@@ -368,6 +368,18 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyMatches(msg, m.keys.Browser):
 		OpenInBrowser(m.detail.Summary().URL)
 		return m, nil
+	case keyMatches(msg, m.keys.NextFile):
+		if m.detail.cursor < len(m.detail.files)-1 {
+			m.detail.cursor++
+		}
+		mm, previewCmd := m.queuePreviewForSelection()
+		return mm, previewCmd
+	case keyMatches(msg, m.keys.PrevFile):
+		if m.detail.cursor > 0 {
+			m.detail.cursor--
+		}
+		mm, previewCmd := m.queuePreviewForSelection()
+		return mm, previewCmd
 	}
 	if m.detailFocus == focusDiff {
 		var cmd tea.Cmd

@@ -201,3 +201,27 @@ func TestDetailDiffFocusRoutesScrollKeys(t *testing.T) {
 		t.Fatalf("preview should have scrolled in diff focus")
 	}
 }
+
+func TestDetailNextPrevFileInDiffFocus(t *testing.T) {
+	m := newDetailModel(t)
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab}) // focus diff
+	m = mm.(Model)
+
+	if m.detail.cursor != 0 {
+		t.Fatalf("cursor should start at 0")
+	}
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = mm.(Model)
+	if m.detail.cursor != 1 {
+		t.Fatalf("n should advance file cursor while keeping diff focus, got %d", m.detail.cursor)
+	}
+	if m.detailFocus != focusDiff {
+		t.Fatalf("focus should remain on diff after n")
+	}
+
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	m = mm.(Model)
+	if m.detail.cursor != 0 {
+		t.Fatalf("N should retreat file cursor, got %d", m.detail.cursor)
+	}
+}

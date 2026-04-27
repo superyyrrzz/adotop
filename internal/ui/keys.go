@@ -12,6 +12,7 @@ type KeyMap struct {
 	Help, Quit       key.Binding
 	PgUp, PgDn       key.Binding
 	GotoTop, GotoEnd key.Binding
+	NextFile, PrevFile key.Binding
 }
 
 func DefaultKeys() KeyMap {
@@ -31,5 +32,7 @@ func DefaultKeys() KeyMap {
 		PgDn:    key.NewBinding(key.WithKeys("pgdown")),
 		GotoTop: key.NewBinding(key.WithKeys("g")),
 		GotoEnd: key.NewBinding(key.WithKeys("G")),
+		NextFile: key.NewBinding(key.WithKeys("n")),
+		PrevFile: key.NewBinding(key.WithKeys("N")),
 	}
 }
