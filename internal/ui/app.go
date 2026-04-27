@@ -308,7 +308,11 @@ func (m Model) updateListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.loadList(m.list.Tab())
 	case keyMatches(msg, m.keys.Browser):
 		if s, ok := m.list.Selected(); ok {
-			OpenInBrowser(s.URL)
+			if s.URL == "" {
+				slog.Warn("open in browser: PR has no URL", "pr", s.ID)
+			} else if err := OpenInBrowser(s.URL); err != nil {
+				slog.Warn("open in browser failed", "url", s.URL, "err", err)
+			}
 		}
 		return m, nil
 	}
@@ -344,7 +348,12 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.previewBodies = map[string][]byte{}
 		return m, m.loadDetail(m.detail.Summary())
 	case keyMatches(msg, m.keys.Browser):
-		OpenInBrowser(m.detail.Summary().URL)
+		u := m.detail.Summary().URL
+		if u == "" {
+			slog.Warn("open in browser: PR has no URL", "pr", m.detail.Summary().ID)
+		} else if err := OpenInBrowser(u); err != nil {
+			slog.Warn("open in browser failed", "url", u, "err", err)
+		}
 		return m, nil
 	case keyMatches(msg, m.keys.NextFile):
 		if m.detail.cursor < len(m.detail.files)-1 {

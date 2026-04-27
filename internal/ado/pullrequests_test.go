@@ -213,3 +213,44 @@ func TestGetIterationChanges(t *testing.T) {
 		t.Fatalf("expected 2 calls (iterations + changes), got %v", calls)
 	}
 }
+
+func TestListPullRequestsSynthesizesURLWhenLinksMissing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{
+					"pullRequestId": 42,
+					"title":         "no links",
+					"sourceRefName": "refs/heads/x",
+					"targetRefName": "refs/heads/main",
+					"creationDate":  "2026-04-25T10:00:00Z",
+					"createdBy":     map[string]any{"displayName": "alice"},
+					"repository": map[string]any{
+						"id":      "repo-uuid",
+						"name":    "MyRepo",
+						"project": map[string]any{"name": "Engineering"},
+					},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient("ceapex", &fakeTokens{})
+	c.BaseURL = srv.URL
+	prs, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Engineering", Tab: TabCreated, MyID: "me"})
+	if err != nil {
+		t.Fatalf("ListPullRequests: %v", err)
+	}
+	if len(prs) != 1 {
+		t.Fatalf("len = %d", len(prs))
+	}
+	want := "https://dev.azure.com/" // org segment depends on test BaseURL; just ensure non-empty + contains the canonical pullrequest path.
+	if prs[0].URL == "" {
+		t.Fatalf("expected synthesized URL when _links is absent, got empty")
+	}
+	if !strings.Contains(prs[0].URL, "/_git/MyRepo/pullrequest/42") {
+		t.Fatalf("synthesized URL missing canonical suffix: %q", prs[0].URL)
+	}
+	_ = want
+}

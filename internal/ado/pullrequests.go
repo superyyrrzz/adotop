@@ -70,8 +70,11 @@ type rawPR struct {
 		DisplayName string `json:"displayName"`
 	} `json:"createdBy"`
 	Repository struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		Project struct {
+			Name string `json:"name"`
+		} `json:"project"`
 	} `json:"repository"`
 	Reviewers []struct {
 		ID          string `json:"id"`
@@ -88,6 +91,24 @@ type rawPR struct {
 
 type listResponse struct {
 	Value []rawPR `json:"value"`
+}
+
+// webURLForPR returns the canonical browser URL for a PR, synthesizing it
+// from BaseURL/project/repo/id when the API response omits _links.web.href
+// (which Azure DevOps' list and detail endpoints frequently do).
+func (c *Client) webURLForPR(project, repo string, id int) string {
+	if project == "" || repo == "" || id == 0 {
+		return ""
+	}
+	base := strings.TrimRight(c.BaseURL, "/")
+	if base == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/%s/_git/%s/pullrequest/%d",
+		base,
+		url.PathEscape(project),
+		url.PathEscape(repo),
+		id)
 }
 
 func (c *Client) ListPullRequests(ctx context.Context, f ListPRFilter) ([]PRSummary, error) {
@@ -119,6 +140,9 @@ func (c *Client) ListPullRequests(ctx context.Context, f ListPRFilter) ([]PRSumm
 	out := make([]PRSummary, 0, len(resp.Value))
 	for _, r := range resp.Value {
 		s := toSummary(r, f.MyID)
+		if s.URL == "" {
+			s.URL = c.webURLForPR(r.Repository.Project.Name, r.Repository.Name, r.PullRequestID)
+		}
 		if f.Tab == TabAssigned && s.MyVote != 0 {
 			continue
 		}
@@ -198,6 +222,9 @@ func (c *Client) GetPullRequest(ctx context.Context, repoID string, prID int, my
 		DescriptionMD: r.Description,
 		SourceSha:     r.LastMergeSourceCommit.CommitID,
 		TargetSha:     r.LastMergeTargetCommit.CommitID,
+	}
+	if d.URL == "" {
+		d.URL = c.webURLForPR(r.Repository.Project.Name, r.Repository.Name, r.PullRequestID)
 	}
 	for _, w := range r.WorkItemRefs {
 		d.WorkItemRefs = append(d.WorkItemRefs, WorkItemRef{ID: w.ID, URL: w.URL})
