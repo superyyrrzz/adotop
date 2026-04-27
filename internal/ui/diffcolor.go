@@ -3,6 +3,11 @@ package ui
 import (
 	"bytes"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
+	"github.com/renzeyu/adotop/internal/ui/theme"
 )
 
 const (
@@ -15,17 +20,20 @@ const (
 	ansiRedBg    = "\x1b[41m"
 	ansiGreenBg  = "\x1b[42m"
 	ansiCyanBg   = "\x1b[46m"
-	// Dim full-line backgrounds (xterm-256: 52 = dark red, 22 = dark green).
-	// These are subtle enough that syntax-highlighted foreground colors stay
-	// readable while still making added/removed lines pop at a glance, the
-	// way Claude Code / GitHub render diffs.
+	addBar       = ansiGreenBg + " " + ansiReset + ansiGreen + "▌" + ansiReset + " "
+	deleteBar    = ansiRedBg + " " + ansiReset + ansiRed + "▌" + ansiReset + " "
+	contextBar   = "   "
+	hunkBar      = ansiCyanBg + " " + ansiReset + ansiCyan + "▌" + ansiReset + " "
+	headerEscape = "\x1b["
+)
+
+// Theme-derived diff line backgrounds. Defaulted to xterm-256 22 (dark
+// green) and 52 (dark red) so package-level use without a theme still
+// produces a sensible render. applyDiffTheme overwrites these at app
+// startup (see New() in app.go) once the active Theme is known.
+var (
 	ansiAddLineBg = "\x1b[48;5;22m"
 	ansiDelLineBg = "\x1b[48;5;52m"
-	addBar        = ansiGreenBg + " " + ansiReset + ansiGreen + "▌" + ansiReset + " "
-	deleteBar     = ansiRedBg + " " + ansiReset + ansiRed + "▌" + ansiReset + " "
-	contextBar    = "   "
-	hunkBar       = ansiCyanBg + " " + ansiReset + ansiCyan + "▌" + ansiReset + " "
-	headerEscape  = "\x1b["
 )
 
 // Colorize takes raw unified-diff bytes and returns ANSI-colored bytes
@@ -126,4 +134,42 @@ func stripDiffPathPrefix(s string) string {
 		return s[2:]
 	}
 	return s
+}
+
+// applyDiffTheme repoints the package-level diff backgrounds at the
+// active theme's DiffAddBg/DiffDelBg colors. lipgloss handles the
+// truecolor → 256-color downgrade based on termenv.ColorProfile().
+//
+// This is package-global state — there's only one diff renderer and
+// only one theme per process, so the indirection isn't worth a struct.
+func applyDiffTheme(t theme.Theme) {
+	// Use a dedicated TrueColor renderer so we can compute ANSI sequences
+	// even when stdout is not a TTY (e.g., in tests). The diff bytes we
+	// emit feed into the bubble tea viewport, which has its own profile,
+	// so producing TrueColor here is safe — the terminal multiplexer at
+	// the very end normalizes it.
+	r := lipgloss.NewRenderer(nil)
+	r.SetColorProfile(termenv.TrueColor)
+	add := r.NewStyle().Background(t.DiffAddBg)
+	del := r.NewStyle().Background(t.DiffDelBg)
+	if seq := openSequence(add.Render("")); seq != "" {
+		ansiAddLineBg = seq
+	}
+	if seq := openSequence(del.Render("")); seq != "" {
+		ansiDelLineBg = seq
+	}
+}
+
+// openSequence pulls the leading "\x1b[...m" out of a lipgloss-rendered
+// string. lipgloss wraps content as "<open><content><reset>"; we want
+// just <open>. Returns "" if the input doesn't start with a CSI.
+func openSequence(s string) string {
+	if !strings.HasPrefix(s, "\x1b[") {
+		return ""
+	}
+	end := strings.Index(s, "m")
+	if end < 0 {
+		return ""
+	}
+	return s[:end+1]
 }

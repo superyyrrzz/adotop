@@ -82,7 +82,9 @@ type pendingAction struct {
 func New(cfg config.Config, client *ado.Client) Model {
 	// Resolve theme once at startup. ADOTOP_THEME can be "light",
 	// "dark", "auto", or empty (auto-detect from terminal background).
-	applyStyles(theme.New(os.Getenv("ADOTOP_THEME")))
+	th := theme.New(os.Getenv("ADOTOP_THEME"))
+	applyStyles(th)
+	applyDiffTheme(th)
 	keys := DefaultKeys()
 	m := Model{
 		cfg:      cfg,
