@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +29,8 @@ type ListModel struct {
 	width     int
 	height    int
 	loadErr   string
+	jumping   bool
+	jumpInput string
 }
 
 func NewList(keys KeyMap) ListModel {
@@ -130,6 +133,9 @@ func (m ListModel) Update(msg tea.Msg) (ListModel, tea.Cmd) {
 		if m.filtering {
 			return m.updateFiltering(msg)
 		}
+		if m.jumping {
+			return m.updateJumping(msg)
+		}
 		switch {
 		case keyMatches(msg, m.keys.NextTab):
 			m.tab = (m.tab + 1) % 4
@@ -151,6 +157,38 @@ func (m ListModel) Update(msg tea.Msg) (ListModel, tea.Cmd) {
 		case keyMatches(msg, m.keys.Filter):
 			m.filtering = true
 			m.filter = ""
+		case keyMatches(msg, m.keys.JumpToID):
+			m.jumping = true
+			m.jumpInput = ""
+		}
+	}
+	return m, nil
+}
+
+type jumpRequestedMsg struct{ ID int }
+
+func (m ListModel) updateJumping(msg tea.KeyMsg) (ListModel, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.jumping = false
+		m.jumpInput = ""
+	case tea.KeyEnter:
+		id, _ := strconv.Atoi(m.jumpInput)
+		m.jumping = false
+		m.jumpInput = ""
+		if id <= 0 {
+			return m, nil
+		}
+		return m, func() tea.Msg { return jumpRequestedMsg{ID: id} }
+	case tea.KeyBackspace:
+		if len(m.jumpInput) > 0 {
+			m.jumpInput = m.jumpInput[:len(m.jumpInput)-1]
+		}
+	case tea.KeyRunes:
+		for _, r := range msg.Runes {
+			if r >= '0' && r <= '9' {
+				m.jumpInput += string(r)
+			}
 		}
 	}
 	return m, nil
@@ -238,6 +276,9 @@ func (m ListModel) View() string {
 
 	if m.filtering {
 		b.WriteString("\n/" + m.filter + lipgloss.NewStyle().Faint(true).Render("█"))
+	}
+	if m.jumping {
+		b.WriteString("\n#" + m.jumpInput + lipgloss.NewStyle().Faint(true).Render("█"))
 	}
 	return b.String()
 }

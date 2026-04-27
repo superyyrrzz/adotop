@@ -390,3 +390,31 @@ func TestOpeningPRRecordsRecentVisit(t *testing.T) {
 		t.Fatalf("expected recents=[77], got ok=%v list=%+v", ok, got)
 	}
 }
+
+func TestListJumpPromptCollectsDigitsAndEmitsRequest(t *testing.T) {
+	m := newTestModel()
+	m.screen = screenList
+
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'#'}})
+	m = mm.(Model)
+	if !m.list.jumping {
+		t.Fatalf("expected jumping=true after #")
+	}
+
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	m = mm.(Model)
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	m = mm.(Model)
+	if m.list.jumpInput != "12" {
+		t.Fatalf("expected jumpInput=12, got %q", m.list.jumpInput)
+	}
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected enter to emit a jumpRequestedMsg cmd")
+	}
+	got := cmd()
+	if jr, ok := got.(jumpRequestedMsg); !ok || jr.ID != 12 {
+		t.Fatalf("expected jumpRequestedMsg{ID:12}, got %T %+v", got, got)
+	}
+}

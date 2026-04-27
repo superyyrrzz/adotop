@@ -16,6 +16,7 @@ type KeyMap struct {
 	NextFile, PrevFile    key.Binding
 	Approve, Abandon      key.Binding
 	ConfirmYes, ConfirmNo key.Binding
+	JumpToID              key.Binding
 }
 
 func DefaultKeys() KeyMap {
@@ -42,5 +43,6 @@ func DefaultKeys() KeyMap {
 		Abandon:    key.NewBinding(key.WithKeys("X")),
 		ConfirmYes: key.NewBinding(key.WithKeys("y", "Y")),
 		ConfirmNo:  key.NewBinding(key.WithKeys("esc")),
+		JumpToID:   key.NewBinding(key.WithKeys("#")),
 	}
 }

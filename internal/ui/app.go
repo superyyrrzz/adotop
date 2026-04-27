@@ -322,6 +322,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.previewBodies, msg.key)
 		}
 		return m, nil
+	case jumpRequestedMsg:
+		prID := msg.ID
+		return m, func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			d, err := m.client.GetPullRequestByID(ctx, prID, m.myID)
+			if err != nil {
+				return jumpResultMsg{prID: prID, err: err}
+			}
+			return jumpResultMsg{prID: prID, summary: d.PRSummary}
+		}
+	case jumpResultMsg:
+		if msg.err != nil {
+			m.footerErr = fmt.Sprintf("jump #%d: %v", msg.prID, msg.err)
+			return m, nil
+		}
+		mm, cmd := m.openDetail(msg.summary)
+		return mm, cmd
 	case actionDoneMsg:
 		if msg.err != nil {
 			m.footerErr = fmt.Sprintf("%s PR #%d: %v", msg.kind, msg.prID, msg.err)
@@ -531,6 +549,7 @@ func (m Model) View() string {
 			"  r           refresh current screen",
 			"  o           open in browser",
 			"  /           filter (list)",
+			"  #           jump to PR by ID (list)",
 			"  tab/shift+tab  switch focus (Detail)",
 			"  n / N       next / prev file (Detail)",
 			"  ↑↓ pgup/pgdn g/G  scroll focused pane",
@@ -551,7 +570,7 @@ func (m Model) View() string {
 func footerHints(s screen) string {
 	switch s {
 	case screenList:
-		return "/:filter  enter:open  o:browser  r:refresh  tab:next  ?:help  q:quit"
+		return "/:filter  #:goto  enter:open  o:browser  r:refresh  tab:next  ?:help  q:quit"
 	case screenDetail:
 		return "tab:focus  n/N:file  ↑↓ pgup/pgdn g/G:scroll  a:approve  X:abandon  o:browser  esc/q:back  r:refresh  ?:help"
 	}
@@ -608,6 +627,12 @@ func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
 type prefetchLoadedMsg struct {
 	key     string
 	content []byte
+	err     error
+}
+
+type jumpResultMsg struct {
+	prID    int
+	summary ado.PRSummary
 	err     error
 }
 
