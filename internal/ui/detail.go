@@ -32,9 +32,17 @@ type DetailModel struct {
 	loadErr  string
 	width    int
 	height   int
+	myID     string
 }
 
 func NewDetail(keys KeyMap) DetailModel { return DetailModel{keys: keys} }
+
+// SetMyID stores the current user descriptor so the reviewer panel can mark
+// the caller's row with "(you)".
+func (m DetailModel) SetMyID(id string) DetailModel {
+	m.myID = id
+	return m
+}
 
 func (m DetailModel) SetSummary(s ado.PRSummary) DetailModel {
 	m.summary = s
@@ -110,7 +118,13 @@ func (m DetailModel) ViewWithFocus(focused bool) string {
 	s := m.summary
 	b.WriteString(Header.Render(fmt.Sprintf("PR #%d  %s", s.ID, s.Title)))
 	b.WriteString("\n")
-	b.WriteString(Faint.Render(fmt.Sprintf("%s  %s → %s", s.Author, s.SourceBranch, s.TargetBranch)))
+	repo := s.Repo
+	if repo == "" {
+		repo = "(unknown repo)"
+	}
+	b.WriteString(Faint.Render(fmt.Sprintf("%s  ·  %s  ·  %s → %s", repo, s.Author, s.SourceBranch, s.TargetBranch)))
+	b.WriteString("\n")
+	b.WriteString(reviewerPanel(s, m.myID))
 	b.WriteString("\n\n")
 
 	if m.detail != nil {
@@ -224,4 +238,53 @@ func statusGlyph(state string) string {
 	default:
 		return None.Render("·")
 	}
+}
+
+// voteLabel maps an ADO reviewer vote integer to a (glyph, text) pair.
+// ADO vote scale: 10 approved, 5 approved-with-suggestions, 0 no vote,
+// -5 waiting for author, -10 rejected.
+func voteLabel(vote int) (string, string) {
+	switch {
+	case vote >= 10:
+		return Approve.Render("✓"), Approve.Render("Approved")
+	case vote >= 5:
+		return Approve.Render("✓~"), Approve.Render("Approved w/ suggestions")
+	case vote <= -10:
+		return Reject.Render("✗"), Reject.Render("Rejected")
+	case vote <= -5:
+		return Wait.Render("⏳"), Wait.Render("Waiting for author")
+	default:
+		return None.Render("·"), Faint.Render("No vote")
+	}
+}
+
+// reviewerPanel renders a one-line "My vote" badge plus a compact list of
+// reviewers and their votes. This makes the post-approve state visible
+// without forcing the user to read the footer flash. `myID` is the caller's
+// descriptor, used to tag the caller's own reviewer row with "(you)".
+func reviewerPanel(s ado.PRSummary, myID string) string {
+	var b strings.Builder
+	myGlyph, myText := voteLabel(s.MyVote)
+	b.WriteString("My vote: " + myGlyph + " " + myText)
+	if len(s.Reviewers) == 0 {
+		return b.String()
+	}
+	b.WriteString("   ")
+	b.WriteString(Faint.Render("Reviewers: "))
+	for i, r := range s.Reviewers {
+		if i > 0 {
+			b.WriteString(Faint.Render(", "))
+		}
+		g, _ := voteLabel(r.Vote)
+		name := r.DisplayName
+		if r.IsRequired {
+			name = "*" + name
+		}
+		if myID != "" && r.ID == myID {
+			name += " (you)"
+			name = Header.Render(name)
+		}
+		b.WriteString(g + " " + name)
+	}
+	return b.String()
 }

@@ -3,6 +3,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -91,6 +92,7 @@ func New(cfg config.Config, client *ado.Client) Model {
 	if id, ok := st.LoadIdentity(); ok {
 		m.user = id.DisplayName
 		m.myID = id.UserID
+		m.detail = m.detail.SetMyID(m.myID)
 	}
 	if cfg.Org != "" && cfg.Project != "" {
 		for _, tab := range []ado.Tab{ado.TabAssigned, ado.TabCreated, ado.TabReviewRequested} {
@@ -262,6 +264,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.user = msg.data.DisplayName()
 		m.myID = msg.data.AuthenticatedUser.ID
+		m.detail = m.detail.SetMyID(m.myID)
 		if m.cache != nil {
 			if err := m.cache.SaveIdentity(m.myID, m.user); err != nil {
 				slog.Warn("cache: save identity", "err", err)
@@ -342,7 +345,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return mm, cmd
 	case actionDoneMsg:
 		if msg.err != nil {
-			m.footerErr = fmt.Sprintf("%s PR #%d: %v", msg.kind, msg.prID, msg.err)
+			m.footerErr = fmt.Sprintf("%s PR #%d: %s", msg.kind, msg.prID, friendlyErr(msg.err))
 			return m, nil
 		}
 		m.footerErr = fmt.Sprintf("PR #%d %s", msg.prID, msg.notes)
@@ -424,6 +427,14 @@ func (m Model) openDetail(s ado.PRSummary) (Model, tea.Cmd) {
 }
 
 func (m Model) updateListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// While a prompt (filter or jump-to-ID) is active, route all keys to the
+	// list so its prompt handlers see Enter/Esc/Backspace before the global
+	// Open/Quit/Browser shortcuts intercept them.
+	if m.list.filtering || m.list.jumping {
+		var cmd tea.Cmd
+		m.list, cmd = m.list.Update(msg)
+		return m, cmd
+	}
 	switch {
 	case keyMatches(msg, m.keys.Quit):
 		return m, tea.Quit
@@ -804,6 +815,17 @@ func orPlaceholder(s, p string) string {
 		return p
 	}
 	return s
+}
+
+// friendlyErr unwraps an ADO APIError to its server-supplied "message" field
+// so the footer shows e.g. "Pull request is completed" instead of a raw 400
+// dump. Falls back to err.Error() for non-API errors.
+func friendlyErr(err error) string {
+	var apiErr *ado.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.FriendlyMessage()
+	}
+	return err.Error()
 }
 
 func simpleDiff(target, source []byte, path string) []byte {

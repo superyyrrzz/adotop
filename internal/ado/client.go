@@ -44,6 +44,35 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("ado: %s -> %d: %s", e.URL, e.Status, truncate(e.Body, 300))
 }
 
+// FriendlyMessage returns the human-readable "message" field from the ADO
+// error envelope when present, else a short status-code summary. Use this
+// when surfacing errors to end-users (footer, toast, etc.).
+func (e *APIError) FriendlyMessage() string {
+	if e == nil {
+		return ""
+	}
+	var env struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(e.Body), &env); err == nil && env.Message != "" {
+		return env.Message
+	}
+	switch e.Status {
+	case 400:
+		return "request rejected by server (HTTP 400)"
+	case 401:
+		return "not authorized (HTTP 401)"
+	case 403:
+		return "forbidden (HTTP 403)"
+	case 404:
+		return "not found (HTTP 404)"
+	case 409:
+		return "conflict — state already changed (HTTP 409)"
+	default:
+		return fmt.Sprintf("server returned HTTP %d", e.Status)
+	}
+}
+
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
