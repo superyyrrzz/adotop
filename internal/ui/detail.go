@@ -377,7 +377,16 @@ func buildFileTree(files []ado.FileChange) []fileTreeRow {
 	}
 	entries := make([]entry, len(files))
 	for i, f := range files {
-		entries[i] = entry{path: strings.TrimPrefix(f.Path, "/"), idx: i}
+		p := strings.TrimPrefix(f.Path, "/")
+		if p == "" {
+			// Defensive: never render a blank file row. If the API
+			// returned an empty path (we've seen this for some delete
+			// entries when sourceServerItem is also missing), surface
+			// it as <unknown> so the user can at least see the
+			// changeType column.
+			p = "<unknown>"
+		}
+		entries[i] = entry{path: p, idx: i}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].path < entries[j].path })
 

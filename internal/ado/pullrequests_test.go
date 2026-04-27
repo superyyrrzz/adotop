@@ -214,6 +214,49 @@ func TestGetIterationChanges(t *testing.T) {
 	}
 }
 
+func TestGetIterationChangesDeletedFileUsesSourceServerItem(t *testing.T) {
+	// Deleted entries often arrive with item.path empty; the real path
+	// lives in sourceServerItem (or originalPath as a last resort).
+	// Verify we fall back so the file row shows a name instead of blank.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/iterations"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"value": []map[string]any{{"id": 1}},
+			})
+		case strings.Contains(r.URL.Path, "/iterations/1/changes"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"changeEntries": []map[string]any{
+					{"changeType": "delete", "item": map[string]any{}, "sourceServerItem": "/old/gone.go"},
+					{"changeType": "delete", "item": map[string]any{"path": ""}, "originalPath": "/old/also_gone.go"},
+					{"changeType": "edit", "item": map[string]any{"path": "/src/keep.go"}},
+				},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	c := NewClient("ignored", &fakeTokens{})
+	c.BaseURL = srv.URL
+	files, err := c.GetIterationChanges(context.Background(), "repo-uuid", 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 3 {
+		t.Fatalf("expected 3 files, got %+v", files)
+	}
+	if files[0].Path != "/old/gone.go" || files[0].ChangeType != "delete" {
+		t.Errorf("delete[0]: want /old/gone.go, got %+v", files[0])
+	}
+	if files[1].Path != "/old/also_gone.go" {
+		t.Errorf("delete[1]: want originalPath fallback, got %+v", files[1])
+	}
+	if files[2].Path != "/src/keep.go" {
+		t.Errorf("edit: %+v", files[2])
+	}
+}
+
 func TestGetPullRequestByIDHitsOrgScopedPath(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

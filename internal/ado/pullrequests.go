@@ -277,6 +277,13 @@ type rawChangeEntry struct {
 	Item       struct {
 		Path string `json:"path"`
 	} `json:"item"`
+	// SourceServerItem and OriginalPath are sibling fields on
+	// GitPullRequestChange (NOT inside item). For deleted/renamed
+	// entries, item.path is often empty and the real server path lives
+	// in one of these. See:
+	// https://learn.microsoft.com/rest/api/azure/devops/git/pull-request-iteration-changes/get
+	SourceServerItem string `json:"sourceServerItem"`
+	OriginalPath     string `json:"originalPath"`
 }
 type rawChangesResp struct {
 	ChangeEntries []rawChangeEntry `json:"changeEntries"`
@@ -301,7 +308,17 @@ func (c *Client) GetIterationChanges(ctx context.Context, repoID string, prID in
 	}
 	out := make([]FileChange, 0, len(ch.ChangeEntries))
 	for _, e := range ch.ChangeEntries {
-		out = append(out, FileChange{Path: e.Item.Path, ChangeType: e.ChangeType})
+		// Pick the first non-empty path: item.path is set for adds/edits;
+		// sourceServerItem and originalPath fill in for deletes/renames
+		// where item.path is empty.
+		path := e.Item.Path
+		if path == "" {
+			path = e.SourceServerItem
+		}
+		if path == "" {
+			path = e.OriginalPath
+		}
+		out = append(out, FileChange{Path: path, ChangeType: e.ChangeType})
 	}
 	return out, nil
 }
