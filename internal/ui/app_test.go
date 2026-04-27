@@ -305,3 +305,32 @@ func TestDetailFocusIndicatorMovesWithFocus(t *testing.T) {
 		t.Fatalf("files header should not show focus dot when diff focused:\n%s", out)
 	}
 }
+
+func TestDetailAbandonRequiresConfirmation(t *testing.T) {
+	m := newDetailModel(t)
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'X'}})
+	m = mm.(Model)
+	if m.pendingAction.kind != "abandon" {
+		t.Fatalf("expected pending abandon prompt, got %q", m.pendingAction.kind)
+	}
+	if cmd != nil {
+		t.Fatalf("X should not fire the action immediately; got cmd")
+	}
+	// Esc cancels.
+	mm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = mm.(Model)
+	if m.pendingAction.kind != "" {
+		t.Fatalf("esc should clear pending action")
+	}
+	if cmd != nil {
+		t.Fatalf("esc should not run any command")
+	}
+}
+
+func TestDetailApproveFiresImmediately(t *testing.T) {
+	m := newDetailModel(t)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	if cmd == nil {
+		t.Fatalf("expected approve to return a command")
+	}
+}

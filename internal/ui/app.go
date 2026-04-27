@@ -55,6 +55,16 @@ type Model struct {
 	detailFocus   detailFocus
 	scrollMem     map[string]int
 	previewBodies map[string][]byte
+
+	pendingAction pendingAction // empty action == no prompt
+}
+
+// pendingAction is a destructive operation awaiting y/n confirmation.
+// `kind` is "" when no prompt is active.
+type pendingAction struct {
+	kind   string // "abandon" (extend later: "complete", etc.)
+	prompt string // text shown to the user, e.g. "Abandon PR #123? (y/N)"
+	run    func(m Model) tea.Cmd
 }
 
 func New(cfg config.Config, client *ado.Client) Model {
@@ -98,6 +108,14 @@ type connDataMsg struct {
 }
 
 type tickMsg time.Time
+
+// actionDoneMsg is the result of a write action (approve, abandon, etc.).
+type actionDoneMsg struct {
+	kind  string // "approve" | "abandon"
+	prID  int
+	err   error
+	notes string // optional human note shown on success ("voted approve")
+}
 
 func tick(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(t time.Time) tea.Msg { return tickMsg(t) })
@@ -151,6 +169,41 @@ func (m Model) loadDetail(s ado.PRSummary) tea.Cmd {
 			return statusesLoadedMsg{statuses: st, err: err}
 		},
 	)
+}
+
+// approveCurrent issues a vote=10 against the current PR. Safe to call
+// repeatedly — ADO treats it as setting the vote to 10.
+func (m Model) approveCurrent() tea.Cmd {
+	s := m.detail.Summary()
+	if s.ID == 0 || s.RepoID == "" || m.myID == "" {
+		return func() tea.Msg {
+			return actionDoneMsg{kind: "approve", prID: s.ID, err: fmt.Errorf("approve: missing PR/repo/identity")}
+		}
+	}
+	repoID, prID := s.RepoID, s.ID
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err := m.client.SetReviewerVote(ctx, repoID, prID, m.myID, 10)
+		return actionDoneMsg{kind: "approve", prID: prID, err: err, notes: "voted approve"}
+	}
+}
+
+// abandonCurrent flips the PR status to abandoned.
+func (m Model) abandonCurrent() tea.Cmd {
+	s := m.detail.Summary()
+	if s.ID == 0 || s.RepoID == "" {
+		return func() tea.Msg {
+			return actionDoneMsg{kind: "abandon", prID: s.ID, err: fmt.Errorf("abandon: missing PR/repo")}
+		}
+	}
+	repoID, prID := s.RepoID, s.ID
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err := m.client.AbandonPullRequest(ctx, repoID, prID)
+		return actionDoneMsg{kind: "abandon", prID: prID, err: err, notes: "abandoned"}
+	}
 }
 
 func (m Model) loadDiff(target diffTarget, current DiffModel, requestID int, s ado.PRSummary, file ado.FileChange, sourceSha, targetSha string) (DiffModel, tea.Cmd) {
@@ -257,7 +310,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.previewBodies, msg.key)
 		}
 		return m, nil
+	case actionDoneMsg:
+		if msg.err != nil {
+			m.footerErr = fmt.Sprintf("%s PR #%d: %v", msg.kind, msg.prID, msg.err)
+			return m, nil
+		}
+		m.footerErr = fmt.Sprintf("PR #%d %s", msg.prID, msg.notes)
+		// Refresh the detail in place so vote/status update; also bust the
+		// list cache for the active tab so the row reflects the change.
+		var cmds []tea.Cmd
+		if m.screen == screenDetail && m.detail.Summary().ID == msg.prID {
+			cmds = append(cmds, m.loadDetail(m.detail.Summary()))
+		}
+		cmds = append(cmds, m.loadList(m.list.Tab()))
+		return m, tea.Batch(cmds...)
 	case tea.KeyMsg:
+		// Confirmation prompt swallows all keys until resolved.
+		if m.pendingAction.kind != "" {
+			if keyMatches(msg, m.keys.ConfirmYes) {
+				run := m.pendingAction.run
+				m.pendingAction = pendingAction{}
+				return m, run(m)
+			}
+			if keyMatches(msg, m.keys.ConfirmNo) {
+				m.pendingAction = pendingAction{}
+				return m, nil
+			}
+			return m, nil
+		}
 		if keyMatches(msg, m.keys.Quit) {
 			return m, tea.Quit
 		}
@@ -355,6 +435,19 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			slog.Warn("open in browser failed", "url", u, "err", err)
 		}
 		return m, nil
+	case keyMatches(msg, m.keys.Approve):
+		return m, m.approveCurrent()
+	case keyMatches(msg, m.keys.Abandon):
+		s := m.detail.Summary()
+		if s.ID == 0 {
+			return m, nil
+		}
+		m.pendingAction = pendingAction{
+			kind:   "abandon",
+			prompt: fmt.Sprintf("Abandon PR #%d? (y/esc)", s.ID),
+			run:    func(mm Model) tea.Cmd { return mm.abandonCurrent() },
+		}
+		return m, nil
 	case keyMatches(msg, m.keys.NextFile):
 		if m.detail.cursor < len(m.detail.files)-1 {
 			m.detail.cursor++
@@ -405,11 +498,15 @@ func (m Model) View() string {
 			"  tab/shift+tab  switch focus (Detail)",
 			"  n / N       next / prev file (Detail)",
 			"  ↑↓ pgup/pgdn g/G  scroll focused pane",
+			"  a           approve PR (Detail)",
+			"  X           abandon PR (Detail, confirms)",
 			"  esc         back",
 		}, "\n"))
 	}
 	footer := Footer.Render(footerHints(m.screen))
-	if m.footerErr != "" {
+	if m.pendingAction.kind != "" {
+		footer = ErrLine.Render(m.pendingAction.prompt)
+	} else if m.footerErr != "" {
 		footer = ErrLine.Render(m.footerErr)
 	}
 	return strings.Join([]string{header, "", body, "", footer}, "\n")
@@ -420,7 +517,7 @@ func footerHints(s screen) string {
 	case screenList:
 		return "/:filter  enter:open  o:browser  r:refresh  tab:next  ?:help  q:quit"
 	case screenDetail:
-		return "tab:focus  n/N:file  ↑↓ pgup/pgdn g/G:scroll  o:browser  esc:back  r:refresh  ?:help  q:quit"
+		return "tab:focus  n/N:file  ↑↓ pgup/pgdn g/G:scroll  a:approve  X:abandon  o:browser  esc:back  r:refresh  ?:help  q:quit"
 	}
 	return ""
 }

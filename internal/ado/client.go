@@ -61,6 +61,34 @@ func (c *Client) GetJSON(ctx context.Context, path string, out any) error {
 	return c.do(ctx, http.MethodGet, u, nil, out)
 }
 
+// PatchJSON sends a PATCH with a JSON body. `out` may be nil to discard the
+// response. Adds api-version automatically if not in the path query.
+func (c *Client) PatchJSON(ctx context.Context, path string, body any, out any) error {
+	u, err := c.resolve(path)
+	if err != nil {
+		return err
+	}
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	return c.do(ctx, http.MethodPatch, u, bytes.NewReader(buf), out)
+}
+
+// PutJSON sends a PUT with a JSON body. Used for reviewer-vote which ADO
+// expects via PUT on /reviewers/{id}.
+func (c *Client) PutJSON(ctx context.Context, path string, body any, out any) error {
+	u, err := c.resolve(path)
+	if err != nil {
+		return err
+	}
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	return c.do(ctx, http.MethodPut, u, bytes.NewReader(buf), out)
+}
+
 func (c *Client) resolve(path string) (string, error) {
 	if path == "" || path[0] != '/' {
 		path = "/" + path
