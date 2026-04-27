@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -58,6 +59,10 @@ type Model struct {
 	previewBodies map[string][]byte
 
 	pendingAction pendingAction // empty action == no prompt
+
+	threads        []ado.Thread
+	showResolved   bool
+	expandedThread map[int]bool
 }
 
 // pendingAction is a destructive operation awaiting y/n confirmation.
@@ -82,6 +87,7 @@ func New(cfg config.Config, client *ado.Client) Model {
 		useDelta:      gitlocal.HasDelta(),
 		scrollMem:     map[string]int{},
 		previewBodies: map[string][]byte{},
+		expandedThread: map[int]bool{},
 	}
 	st, err := cache.New()
 	if err != nil {
@@ -120,6 +126,12 @@ type actionDoneMsg struct {
 	prID  int
 	err   error
 	notes string // optional human note shown on success ("voted approve")
+}
+
+// threadsLoadedMsg is the response from GetPullRequestThreads.
+type threadsLoadedMsg struct {
+	threads []ado.Thread
+	err     error
 }
 
 func tick(d time.Duration) tea.Cmd {
@@ -181,6 +193,12 @@ func (m Model) loadDetail(s ado.PRSummary) tea.Cmd {
 			defer cancel()
 			st, err := m.client.GetStatuses(ctx, s.RepoID, s.ID)
 			return statusesLoadedMsg{statuses: st, err: err}
+		},
+		func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			threads, err := m.client.GetPullRequestThreads(ctx, s.RepoID, s.ID)
+			return threadsLoadedMsg{threads: threads, err: err}
 		},
 	)
 }
@@ -302,6 +320,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.detail, cmd = m.detail.Update(msg)
 		return m, cmd
+	case threadsLoadedMsg:
+		if msg.err == nil {
+			m.threads = msg.threads
+			m = m.refreshPreview()
+		}
+		return m, nil
 	case diffLoadedMsg:
 		if msg.target != diffTargetPreview {
 			return m, nil
@@ -317,6 +341,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if off, ok := m.scrollMem[m.previewKey]; ok {
 			m.preview.vp.SetYOffset(off)
 		}
+		m = m.refreshPreview()
 		return m, cmd
 	case prefetchLoadedMsg:
 		if msg.err == nil {
@@ -414,6 +439,8 @@ func (m Model) openDetail(s ado.PRSummary) (Model, tea.Cmd) {
 	m.detailFocus = focusFiles
 	m.scrollMem = map[string]int{}
 	m.previewBodies = map[string][]byte{}
+	m.threads = nil
+	m.expandedThread = map[int]bool{}
 	m.screen = screenDetail
 	if m.cache != nil {
 		if err := m.cache.RecordVisit(s); err != nil {
@@ -502,6 +529,21 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keyMatches(msg, m.keys.Approve):
 		return m, m.approveCurrent()
+	case keyMatches(msg, m.keys.ShowResolved):
+		m.showResolved = !m.showResolved
+		m = m.refreshPreview()
+		return m, nil
+	case keyMatches(msg, m.keys.Open):
+		if m.detailFocus == focusDiff {
+			// Toggle expansion of every (visible) thread on the focused file.
+			f, ok := m.detail.SelectedFile()
+			if ok {
+				m = m.toggleThreadsForFile(f.Path)
+				m = m.refreshPreview()
+			}
+			return m, nil
+		}
+		return m, nil
 	case keyMatches(msg, m.keys.Abandon):
 		s := m.detail.Summary()
 		if s.ID == 0 {
@@ -566,6 +608,8 @@ func (m Model) View() string {
 			"  ↑↓ pgup/pgdn g/G  scroll focused pane",
 			"  a           approve PR (Detail)",
 			"  X           abandon PR (Detail, confirms)",
+			"  enter       expand comment threads on focused file (Diff focus)",
+			"  R           toggle showing resolved comments",
 			"  esc         back",
 		}, "\n"))
 	}
@@ -595,7 +639,7 @@ func footerHints(s screen) string {
 	case screenList:
 		return "/:filter  #:goto  enter:open  o:browser  r:refresh  tab:next  ?:help  q:quit"
 	case screenDetail:
-		return "tab:focus  n/N:file  ↑↓ pgup/pgdn g/G:scroll  a:approve  X:abandon  o:browser  esc/q:back  r:refresh  ?:help"
+		return "tab:focus  n/N:file  ↑↓ pgup/pgdn g/G:scroll  enter:expand-comments  R:show-resolved  a:approve  X:abandon  o:browser  esc/q:back  r:refresh  ?:help"
 	}
 	return ""
 }
@@ -635,6 +679,7 @@ func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
 		if off, ok := m.scrollMem[key]; ok {
 			m.preview.vp.SetYOffset(off)
 		}
+		m = m.refreshPreview()
 		mm, prefetchCmd := m.prefetchNeighbors()
 		return mm, prefetchCmd
 	}
@@ -840,18 +885,158 @@ func friendlyErr(err error) string {
 	return err.Error()
 }
 
+// simpleDiff produces a unified diff (target → source) for the REST
+// fallback when no local clone is available. Uses an LCS-based line
+// comparison so the output is line-accurate (not a wholesale "everything
+// removed, everything added" dump). Applies the same whitespace
+// normalization as the local-git path so it matches the ADO web UI:
+//   - CRLF → LF
+//   - trailing whitespace stripped
+// Set ADOTOP_DIFF_STRICT=1 to skip normalization.
 func simpleDiff(target, source []byte, path string) []byte {
+	t := normalizeForDiff(string(target))
+	s := normalizeForDiff(string(source))
+	tl := strings.Split(t, "\n")
+	sl := strings.Split(s, "\n")
 	var b strings.Builder
 	fmt.Fprintf(&b, "--- a%s\n+++ b%s\n", path, path)
-	t := strings.Split(string(target), "\n")
-	s := strings.Split(string(source), "\n")
-	for _, line := range t {
-		b.WriteString("- " + line + "\n")
-	}
-	for _, line := range s {
-		b.WriteString("+ " + line + "\n")
+	hunks := lcsUnifiedHunks(tl, sl, 3)
+	for _, h := range hunks {
+		b.WriteString(h)
 	}
 	return []byte(b.String())
+}
+
+func normalizeForDiff(s string) string {
+	if v := strings.TrimSpace(os.Getenv("ADOTOP_DIFF_STRICT")); v != "" && v != "0" && !strings.EqualFold(v, "false") {
+		return s
+	}
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// lcsUnifiedHunks computes a Myers-style LCS between two line slices and
+// emits unified-diff hunks with the given context size. Good enough to
+// match what `git diff` would produce for typical PR-sized files.
+func lcsUnifiedHunks(a, b []string, ctx int) []string {
+	n, m := len(a), len(b)
+	// Build LCS length table.
+	lcs := make([][]int, n+1)
+	for i := range lcs {
+		lcs[i] = make([]int, m+1)
+	}
+	for i := n - 1; i >= 0; i-- {
+		for j := m - 1; j >= 0; j-- {
+			if a[i] == b[j] {
+				lcs[i][j] = lcs[i+1][j+1] + 1
+			} else if lcs[i+1][j] >= lcs[i][j+1] {
+				lcs[i][j] = lcs[i+1][j]
+			} else {
+				lcs[i][j] = lcs[i][j+1]
+			}
+		}
+	}
+	// Walk the table to emit ops: " " (equal), "-" (a-only), "+" (b-only).
+	type op struct {
+		kind byte
+		text string
+	}
+	var ops []op
+	i, j := 0, 0
+	for i < n && j < m {
+		switch {
+		case a[i] == b[j]:
+			ops = append(ops, op{' ', a[i]})
+			i++
+			j++
+		case lcs[i+1][j] >= lcs[i][j+1]:
+			ops = append(ops, op{'-', a[i]})
+			i++
+		default:
+			ops = append(ops, op{'+', b[j]})
+			j++
+		}
+	}
+	for i < n {
+		ops = append(ops, op{'-', a[i]})
+		i++
+	}
+	for j < m {
+		ops = append(ops, op{'+', b[j]})
+		j++
+	}
+
+	// Group ops into hunks with `ctx` lines of surrounding context.
+	var hunks []string
+	k := 0
+	for k < len(ops) {
+		// Find the next change.
+		for k < len(ops) && ops[k].kind == ' ' {
+			k++
+		}
+		if k >= len(ops) {
+			break
+		}
+		// Hunk start = max(0, k-ctx).
+		start := k - ctx
+		if start < 0 {
+			start = 0
+		}
+		// Find hunk end: walk forward including changes; allow up to 2*ctx
+		// equal lines between change blocks before splitting.
+		end := k
+		gap := 0
+		for end < len(ops) {
+			if ops[end].kind == ' ' {
+				gap++
+				if gap > 2*ctx {
+					end -= gap - ctx
+					break
+				}
+			} else {
+				gap = 0
+			}
+			end++
+		}
+		if end > len(ops) {
+			end = len(ops)
+		}
+		// Compute line numbers for header.
+		var aStart, bStart, aLen, bLen int
+		for x := 0; x < start; x++ {
+			if ops[x].kind != '+' {
+				aStart++
+			}
+			if ops[x].kind != '-' {
+				bStart++
+			}
+		}
+		aStart++
+		bStart++
+		var body strings.Builder
+		for x := start; x < end; x++ {
+			body.WriteByte(ops[x].kind)
+			body.WriteString(ops[x].text)
+			body.WriteByte('\n')
+			switch ops[x].kind {
+			case ' ':
+				aLen++
+				bLen++
+			case '-':
+				aLen++
+			case '+':
+				bLen++
+			}
+		}
+		header := fmt.Sprintf("@@ -%d,%d +%d,%d @@\n", aStart, aLen, bStart, bLen)
+		hunks = append(hunks, header+body.String())
+		k = end
+	}
+	return hunks
 }
 
 // Run starts the Bubble Tea program with the alt screen.

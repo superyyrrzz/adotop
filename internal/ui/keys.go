@@ -17,6 +17,7 @@ type KeyMap struct {
 	Approve, Abandon      key.Binding
 	ConfirmYes, ConfirmNo key.Binding
 	JumpToID              key.Binding
+	ShowResolved          key.Binding
 }
 
 func DefaultKeys() KeyMap {
@@ -44,5 +45,6 @@ func DefaultKeys() KeyMap {
 		ConfirmYes: key.NewBinding(key.WithKeys("y", "Y")),
 		ConfirmNo:  key.NewBinding(key.WithKeys("esc")),
 		JumpToID:   key.NewBinding(key.WithKeys("#")),
+		ShowResolved: key.NewBinding(key.WithKeys("R")),
 	}
 }

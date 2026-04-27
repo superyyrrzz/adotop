@@ -4,16 +4,37 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"os/exec"
+	"strings"
 )
+
+// diffNormalizationFlags returns the git-diff options that align local
+// rendering with the Azure DevOps web UI:
+//
+//   - --ignore-cr-at-eol      : treat CRLF and LF as equal (Windows checkouts).
+//   - --ignore-space-at-eol   : ignore trailing-whitespace edits (web UI hides
+//     these by default and reviewers rarely care).
+//
+// Set ADOTOP_DIFF_STRICT=1 to disable both and see every byte difference.
+func diffNormalizationFlags() []string {
+	if v := strings.TrimSpace(os.Getenv("ADOTOP_DIFF_STRICT")); v != "" && v != "0" && !strings.EqualFold(v, "false") {
+		return nil
+	}
+	return []string{"--ignore-cr-at-eol", "--ignore-space-at-eol"}
+}
 
 // Diff runs `git -C clonePath diff target..source -- file`. If useDelta is true
 // and `delta` is on PATH, the diff is piped through it for syntax highlighting.
+//
+// Diff applies whitespace normalization (CRLF, trailing spaces) by default to
+// match Azure DevOps' web UI; set ADOTOP_DIFF_STRICT=1 to opt out.
 func Diff(ctx context.Context, clonePath, targetSha, sourceSha, file string, useDelta bool) ([]byte, error) {
 	args := []string{"-C", clonePath, "diff", "--no-color"}
 	if useDelta {
 		args = []string{"-C", clonePath, "diff"}
 	}
+	args = append(args, diffNormalizationFlags()...)
 	args = append(args, targetSha+".."+sourceSha, "--", file)
 
 	gitCmd := exec.CommandContext(ctx, "git", args...)
