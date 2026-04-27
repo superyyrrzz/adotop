@@ -674,8 +674,10 @@ func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
 		}
 		m.preview = m.sizeDiffModel(m.preview.SetHeader(f.Path, renderer), diffTargetPreview)
 		m.previewReqID++
+		// Pull the precolorized render so we skip Colorize on every j/k.
+		rendered, _ := m.previewCache.Rendered(key)
 		m.preview, _ = m.preview.Update(diffLoadedMsg{
-			content: body, target: diffTargetPreview, requestID: m.previewReqID,
+			content: body, rendered: rendered, target: diffTargetPreview, requestID: m.previewReqID,
 		})
 		if off, ok := m.scrollMem[key]; ok {
 			m.preview.vp.SetYOffset(off)

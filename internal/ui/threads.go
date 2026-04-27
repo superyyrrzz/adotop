@@ -49,17 +49,30 @@ func (m Model) toggleThreadsForFile(path string) Model {
 
 // refreshPreview re-renders the diff preview viewport's content so that
 // changes to thread filters / expansion show up immediately. No-op when
-// no preview is loaded yet.
+// no preview is loaded yet, or when there's no comments block AND the
+// viewport already has content (the diffLoadedMsg path or a previous
+// refresh already wrote it).
+//
+// We skip the SetContent when the comments block is empty because the
+// viewport already shows the colorized diff that was set in the
+// diffLoadedMsg handler — recomputing it just trashes the scroll
+// position and wastes a Colorize.
 func (m Model) refreshPreview() Model {
 	if m.previewKey == "" {
 		return m
 	}
-	body, _ := m.previewCache.Get(m.previewKey)
-	if body == nil {
+	rendered, ok := m.previewCache.Rendered(m.previewKey)
+	if !ok {
 		return m
 	}
-	composed := composeDiffWithComments(body, m.previewCommentsBlock())
-	m.preview.vp.SetContent(string(Colorize(body)) + composed)
+	commentsBlock := m.previewCommentsBlock()
+	composed := composeDiffWithComments(nil, commentsBlock)
+	if composed == "" && m.preview.loaded {
+		// Diff already in viewport; nothing to fold in. Skip SetContent
+		// so we don't pay for a viewport rebuild on every j/k.
+		return m
+	}
+	m.preview.vp.SetContent(rendered + composed)
 	return m
 }
 

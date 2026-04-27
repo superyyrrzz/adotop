@@ -13,6 +13,11 @@ type diffLoadedMsg struct {
 	err       error
 	target    diffTarget
 	requestID int
+	// rendered, if non-empty, is the precolorized form of `content`.
+	// The cache-hit path in app.go fills this so we don't pay for a
+	// second Colorize pass on every j/k. When empty we fall back to
+	// running Colorize ourselves.
+	rendered string
 }
 
 type diffTarget int
@@ -72,7 +77,11 @@ func (m DiffModel) Update(msg tea.Msg) (DiffModel, tea.Cmd) {
 		} else {
 			m.loaded = true
 			m.reloading = false
-			m.vp.SetContent(string(Colorize(msg.content)))
+			if msg.rendered != "" {
+				m.vp.SetContent(msg.rendered)
+			} else {
+				m.vp.SetContent(string(Colorize(msg.content)))
+			}
 			m.vp.GotoTop()
 		}
 	case tea.KeyMsg:

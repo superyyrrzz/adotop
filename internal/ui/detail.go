@@ -37,6 +37,22 @@ type DetailModel struct {
 	paneWidth int // width of the left pane (set by parent); 0 = unknown
 	paneHeight int
 	myID      string
+	// treeMemo caches the result of buildFileTree(m.files). The same
+	// keypress fans out to neighborFile, DisplayNeighbors, and the
+	// renderFilesBlock — without memoization we sort the file slice 3-4
+	// times per j/k. Pointer so the cache survives value copies of
+	// DetailModel; treeFor checks identity (len + first/last path) before
+	// returning the memo.
+	treeMemo *fileTreeMemo
+}
+
+// fileTreeMemo is the cached result of buildFileTree plus a cheap
+// fingerprint we can compare to detect when m.files has changed.
+type fileTreeMemo struct {
+	rows      []fileTreeRow
+	filesLen  int
+	firstPath string
+	lastPath  string
 }
 
 func NewDetail(keys KeyMap) DetailModel { return DetailModel{keys: keys} }
@@ -64,6 +80,7 @@ func (m DetailModel) SetSummary(s ado.PRSummary) DetailModel {
 	m.statuses = nil
 	m.cursor = 0
 	m.loadErr = ""
+	m.treeMemo = nil
 	return m
 }
 
@@ -96,6 +113,10 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 			m.loadErr = msg.err.Error()
 		} else {
 			m.files = msg.files
+			// Pre-allocate the memo holder so subsequent value copies of
+			// DetailModel share the cache via the pointer. fileTree
+			// fills/refreshes it in place.
+			m.treeMemo = &fileTreeMemo{filesLen: -1}
 		}
 	case statusesLoadedMsg:
 		if msg.err == nil {
@@ -112,6 +133,49 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 	return m, nil
 }
 
+// fileTree returns the cached buildFileTree result for m.files, building
+// it on first call. The memo holder is pre-allocated whenever m.files
+// changes (see filesLoadedMsg handler) so the *fileTreeMemo pointer is
+// shared across value copies of DetailModel — fileTree can then mutate
+// the holder in place and the new rows are visible to every copy that
+// holds the same pointer.
+//
+// Cheap fingerprint (len + first/last path) guards against the
+// (unlikely) case where the slice was mutated underneath us without
+// going through a message.
+func (m DetailModel) fileTree() []fileTreeRow {
+	if m.treeMemo != nil &&
+		m.treeMemo.filesLen == len(m.files) &&
+		m.treeMemo.firstPath == firstPath(m.files) &&
+		m.treeMemo.lastPath == lastPath(m.files) {
+		return m.treeMemo.rows
+	}
+	rows := buildFileTree(m.files)
+	if m.treeMemo != nil {
+		// Mutate in place so the cached pointer (shared across value
+		// copies) sees the freshly-built rows.
+		m.treeMemo.rows = rows
+		m.treeMemo.filesLen = len(m.files)
+		m.treeMemo.firstPath = firstPath(m.files)
+		m.treeMemo.lastPath = lastPath(m.files)
+	}
+	return rows
+}
+
+func firstPath(files []ado.FileChange) string {
+	if len(files) == 0 {
+		return ""
+	}
+	return files[0].Path
+}
+
+func lastPath(files []ado.FileChange) string {
+	if len(files) == 0 {
+		return ""
+	}
+	return files[len(files)-1].Path
+}
+
 // neighborFile returns the file index that comes after (delta=+1) or
 // before (delta=-1) the current cursor when files are walked in
 // **display order** (the sorted/grouped tree). This keeps j/k in sync
@@ -120,7 +184,7 @@ func (m DetailModel) neighborFile(delta int) int {
 	if len(m.files) == 0 {
 		return m.cursor
 	}
-	rows := buildFileTree(m.files)
+	rows := m.fileTree()
 	// Collect file rows in display order.
 	order := make([]int, 0, len(m.files))
 	for _, r := range rows {
@@ -155,7 +219,7 @@ func (m DetailModel) DisplayNeighbors(radius int) []int {
 	if radius <= 0 || len(m.files) == 0 {
 		return nil
 	}
-	rows := buildFileTree(m.files)
+	rows := m.fileTree()
 	order := make([]int, 0, len(m.files))
 	for _, r := range rows {
 		if !r.isDir {
@@ -313,7 +377,7 @@ func (m DetailModel) renderHeader(focused bool) string {
 // top of the pane.
 func (m DetailModel) renderFilesBlock(_ bool, headerLines int) string {
 	var b strings.Builder
-	rows := buildFileTree(m.files)
+	rows := m.fileTree()
 	cursorRow := rowIndexForFile(rows, m.cursor)
 	start, end := m.rowWindowFitting(rows, cursorRow, headerLines)
 	for i := start; i < end; i++ {
