@@ -61,6 +61,12 @@ type Model struct {
 
 	pendingAction pendingAction // empty action == no prompt
 
+	// voteMenu is true when the `v` overlay is open and waiting for a
+	// vote selection (a/s/w/r/c/esc). Modal: while open, all keypresses
+	// route to the menu and global bindings (Refresh, ShowResolved, etc.)
+	// are ignored.
+	voteMenu bool
+
 	// pendingG is set when the user pressed `g` and we're waiting for
 	// the second key of the vim-style `gg` sequence. Any other key
 	// cancels the pending state. Reset on screen change.
@@ -217,18 +223,26 @@ func (m Model) loadDetail(s ado.PRSummary) tea.Cmd {
 // approveCurrent issues a vote=10 against the current PR. Safe to call
 // repeatedly — ADO treats it as setting the vote to 10.
 func (m Model) approveCurrent() tea.Cmd {
+	return m.setVoteCurrent(10, "voted approve")
+}
+
+// setVoteCurrent sets the caller's vote on the active PR. vote uses
+// ADO's scale: 10=approved, 5=approved-with-suggestions, 0=no-vote,
+// -5=waiting-for-author, -10=rejected. label is the success message
+// shown in the footer.
+func (m Model) setVoteCurrent(vote int, label string) tea.Cmd {
 	s := m.detail.Summary()
 	if s.ID == 0 || s.RepoID == "" || m.myID == "" {
 		return func() tea.Msg {
-			return actionDoneMsg{kind: "approve", prID: s.ID, err: fmt.Errorf("approve: missing PR/repo/identity")}
+			return actionDoneMsg{kind: "vote", prID: s.ID, err: fmt.Errorf("vote: missing PR/repo/identity")}
 		}
 	}
 	repoID, prID := s.RepoID, s.ID
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		err := m.client.SetReviewerVote(ctx, repoID, prID, m.myID, 10)
-		return actionDoneMsg{kind: "approve", prID: prID, err: err, notes: "voted approve"}
+		err := m.client.SetReviewerVote(ctx, repoID, prID, m.myID, vote)
+		return actionDoneMsg{kind: "vote", prID: prID, err: err, notes: label}
 	}
 }
 
@@ -500,6 +514,12 @@ func (m Model) updateListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Vote menu is modal: while open, only its own letters and esc are
+	// recognized. This lets us reuse single chars like `r` for reject
+	// without conflicting with the global Refresh binding.
+	if m.voteMenu {
+		return m.handleVoteMenuKey(msg)
+	}
 	// Vim-style gg/G: `g` is a lead-in that arms pendingG, the next
 	// keystroke completes (or cancels) the sequence. `G` is a one-shot
 	// jump-to-end. Behavior depends on which pane is focused:
@@ -562,6 +582,10 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keyMatches(msg, m.keys.Approve):
 		return m, m.approveCurrent()
+	case keyMatches(msg, m.keys.VoteMenu):
+		// Open the vote overlay; next key picks the vote (a/s/w/r/c/esc).
+		m.voteMenu = true
+		return m, nil
 	case keyMatches(msg, m.keys.ShowResolved):
 		m.showResolved = !m.showResolved
 		m = m.refreshPreview()
@@ -650,6 +674,39 @@ func (m Model) gotoEnd() (tea.Model, tea.Cmd) {
 	return mm, cmd
 }
 
+// handleVoteMenuKey resolves the open vote overlay. It always closes
+// the menu (success or cancel) so the user can never get stuck in it.
+// Recognized keys:
+//
+//	a -> approve (+10)
+//	s -> approve with suggestions (+5)
+//	w -> wait for author (-5)
+//	r -> reject (-10)
+//	c -> clear vote (0)
+//	esc / any other key -> cancel, no API call
+func (m Model) handleVoteMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.voteMenu = false
+	if msg.Type == tea.KeyEsc {
+		return m, nil
+	}
+	if msg.Type != tea.KeyRunes || len(msg.Runes) == 0 {
+		return m, nil
+	}
+	switch msg.Runes[0] {
+	case 'a':
+		return m, m.setVoteCurrent(10, "voted approve")
+	case 's':
+		return m, m.setVoteCurrent(5, "voted approve w/ suggestions")
+	case 'w':
+		return m, m.setVoteCurrent(-5, "voted wait for author")
+	case 'r':
+		return m, m.setVoteCurrent(-10, "voted reject")
+	case 'c':
+		return m, m.setVoteCurrent(0, "cleared vote")
+	}
+	return m, nil
+}
+
 func (m Model) View() string {
 	header := Header.Render(fmt.Sprintf("adotop  %s/%s  user=%s", orPlaceholder(m.cfg.Org, "(no org)"), orPlaceholder(m.cfg.Project, "(no project)"), m.user))
 	var body string
@@ -674,6 +731,7 @@ func (m Model) View() string {
 			"  ↑↓ pgup/pgdn  scroll focused pane",
 			"  gg / G       jump to first / last (file list or diff, depending on focus)",
 			"  a           approve PR (Detail)",
+			"  v           open vote menu: a/s/w/r/c (Detail)",
 			"  X           abandon PR (Detail, confirms)",
 			"  enter       expand comment threads on focused file (Diff focus)",
 			"  R           toggle showing resolved comments",
@@ -681,7 +739,11 @@ func (m Model) View() string {
 		}, "\n"))
 	}
 	footer := Footer.Render(footerHints(m.screen))
-	if m.pendingAction.kind != "" {
+	if m.voteMenu {
+		// Highlight the menu prompt the same way as confirmation prompts
+		// so the user notices the modal state.
+		footer = ErrLine.Render("vote: a=approve  s=approve+suggest  w=wait  r=reject  c=clear  esc=cancel")
+	} else if m.pendingAction.kind != "" {
 		footer = ErrLine.Render(m.pendingAction.prompt)
 	} else if m.footerErr != "" {
 		footer = ErrLine.Render(m.footerErr)
@@ -706,7 +768,7 @@ func footerHints(s screen) string {
 	case screenList:
 		return "/:filter  #:goto  enter:open  o:browser  r:refresh  tab:next  ?:help  q:quit"
 	case screenDetail:
-		return "tab:focus  n/N:file  ↑↓ pgup/pgdn:scroll  gg/G:top/bottom  enter:expand-comments  R:show-resolved  a:approve  X:abandon  o:browser  esc/q:back  r:refresh  ?:help"
+		return "tab:focus  n/N:file  ↑↓ pgup/pgdn:scroll  gg/G:top/bottom  enter:expand-comments  R:show-resolved  a:approve  v:vote-menu  X:abandon  o:browser  esc/q:back  r:refresh  ?:help"
 	}
 	return ""
 }

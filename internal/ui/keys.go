@@ -15,6 +15,7 @@ type KeyMap struct {
 	GotoTop, GotoEnd      key.Binding
 	NextFile, PrevFile    key.Binding
 	Approve, Abandon      key.Binding
+	VoteMenu              key.Binding
 	ConfirmYes, ConfirmNo key.Binding
 	JumpToID              key.Binding
 	ShowResolved          key.Binding
@@ -42,6 +43,7 @@ func DefaultKeys() KeyMap {
 		PrevFile:   key.NewBinding(key.WithKeys("N")),
 		Approve:    key.NewBinding(key.WithKeys("a")),
 		Abandon:    key.NewBinding(key.WithKeys("X")),
+		VoteMenu:   key.NewBinding(key.WithKeys("v")),
 		ConfirmYes: key.NewBinding(key.WithKeys("y", "Y")),
 		ConfirmNo:  key.NewBinding(key.WithKeys("esc")),
 		JumpToID:   key.NewBinding(key.WithKeys("#")),
