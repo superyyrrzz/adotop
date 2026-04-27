@@ -59,8 +59,64 @@ func TestDetailHeaderVisibleAcrossPaneSizes(t *testing.T) {
 		// Render through the same path production uses.
 		m = m.SetPaneSize(paneW, paneH)
 		out := m.ViewWithFocus(true)
-		assertHeaderVisible(t, out, summary, paneH)
+		assertHeaderVisible(t, out, summary, paneW, paneH)
 	})
+}
+
+func TestDetailHeaderFitsWithLongRepoLineAndManyReviewers(t *testing.T) {
+	// Regression for PR #1145102: long repo+branch line and 5 reviewer
+	// rows wrap inside a ~40-col left pane, so the rendered header is
+	// taller than its source-line count. If we measure pre-wrap, the
+	// file list over-budgets and the total view exceeds bodyHeight,
+	// causing the terminal to scroll and clip the top.
+	summary := ado.PRSummary{
+		ID: 1145102, Title: "release 4.27", Repo: "Docs.RelationalContentService",
+		Author: "Some Long Author Name", SourceBranch: "develop", TargetBranch: "master",
+		Reviewers: []ado.ReviewerVote{
+			{DisplayName: "Reviewer One", Vote: 10, IsRequired: true},
+			{DisplayName: "Reviewer Two With Long Name", Vote: 0},
+			{DisplayName: "Reviewer Three", Vote: 5},
+			{DisplayName: "Reviewer Four Long-ish", Vote: 0, IsRequired: true},
+			{DisplayName: "Reviewer Five", Vote: 0},
+		},
+	}
+	desc := "Dependency upgrade and code refactoring: Migrates object mapping from " +
+		"AutoMapper to ForgeMap library across the entire service surface, including " +
+		"all the request handlers, response serializers, and integration test fixtures."
+	files := make([]ado.FileChange, 25)
+	for i := range files {
+		files[i] = ado.FileChange{Path: fmt.Sprintf("/src/file_%03d.go", i), ChangeType: "edit"}
+	}
+	forEachPaneSize(t, func(t *testing.T, paneW, paneH int) {
+		m := NewDetail(DefaultKeys())
+		m = m.SetSummary(summary)
+		m, _ = m.Update(detailLoadedMsg{detail: &ado.PRDetail{PRSummary: summary, DescriptionMD: desc}})
+		m, _ = m.Update(filesLoadedMsg{files: files})
+		m = m.SetPaneSize(paneW, paneH)
+		out := m.ViewWithFocus(true)
+		assertHeaderVisible(t, out, summary, paneW, paneH)
+	})
+}
+
+func TestDetailDisplayNeighborsWalksSortedTree(t *testing.T) {
+	// API order is reversed; sorted tree puts /a before /b before /c.
+	files := []ado.FileChange{
+		{Path: "/c.go"}, {Path: "/b.go"}, {Path: "/a.go"},
+	}
+	m := NewDetail(DefaultKeys())
+	m, _ = m.Update(filesLoadedMsg{files: files})
+	// API index 1 == /b.go (the middle file in display order too).
+	m.cursor = 1
+	got := m.DisplayNeighbors(1)
+	if len(got) != 2 {
+		t.Fatalf("want 2 neighbors, got %v", got)
+	}
+	// Neighbors are returned d=1: [pos-1, pos+1].
+	// Display order: a(idx2), b(idx1), c(idx0). pos for cursor=1 is 1.
+	// pos-1 -> idx2 (a.go), pos+1 -> idx0 (c.go).
+	if got[0] != 2 || got[1] != 0 {
+		t.Fatalf("want [2,0] (display-order neighbors of /b.go), got %v", got)
+	}
 }
 
 func TestDetailWindowsLongFileListAroundCursor(t *testing.T) {

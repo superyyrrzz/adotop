@@ -129,7 +129,7 @@ func newTestModel() Model {
 		detail:        NewDetail(keys),
 		preview:       NewDiff(keys),
 		scrollMem:     map[string]int{},
-		previewBodies: map[string][]byte{},
+		previewCache:  newDiffBodyCache(5),
 	}
 }
 
@@ -269,7 +269,7 @@ func TestDetailRestoresPerFileScrollOffset(t *testing.T) {
 func TestDetailServesPrefetchedNeighborInstantly(t *testing.T) {
 	m := newDetailModel(t)
 	bKey := diffSelectionKey("src", "tgt", "/b.go")
-	m.previewBodies[bKey] = []byte("--- a/b.go\n+++ b/b.go\n+B\n")
+	m.previewCache.Set(m.detail.Summary().ID, bKey, []byte("--- a/b.go\n+++ b/b.go\n+B\n"))
 	m.preview = m.preview.SetSize(40, 10)
 
 	// Move to /b.go — cache hit should render synchronously.

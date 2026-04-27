@@ -54,7 +54,7 @@ func (m Model) refreshPreview() Model {
 	if m.previewKey == "" {
 		return m
 	}
-	body := m.previewBodies[m.previewKey]
+	body, _ := m.previewCache.Get(m.previewKey)
 	if body == nil {
 		return m
 	}

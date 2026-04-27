@@ -70,11 +70,13 @@ func forEachPaneSize(t *testing.T, fn func(t *testing.T, paneW, paneH int)) {
 
 // assertHeaderVisible enforces the "always-visible PR chrome" invariant
 // against a rendered detail view: repo line, "PR #N" title, and the
-// Files sub-header must all be present, and the rendered height must
-// not exceed the pane height.
+// Files sub-header must all be present, and the rendered VISUAL height
+// (after the parent pane wraps long lines at paneW) must not exceed
+// paneH. paneW=0 skips the wrap simulation and falls back to source-line
+// counting (use only when wrap behavior isn't relevant).
 //
 // New chrome invariants belong here, not scattered across tests.
-func assertHeaderVisible(t *testing.T, out string, s ado.PRSummary, paneH int) {
+func assertHeaderVisible(t *testing.T, out string, s ado.PRSummary, paneW, paneH int) {
 	t.Helper()
 	if s.Repo != "" && !strings.Contains(out, s.Repo) {
 		t.Errorf("repo %q missing from view:\n%s", s.Repo, out)
@@ -85,7 +87,16 @@ func assertHeaderVisible(t *testing.T, out string, s ado.PRSummary, paneH int) {
 	if !strings.Contains(out, "● Files") && !strings.Contains(out, "○ Files") {
 		t.Errorf("Files sub-header missing from view:\n%s", out)
 	}
-	if h := lipgloss.Height(out); h > paneH {
-		t.Errorf("rendered %d lines, exceeds pane height %d:\n%s", h, paneH, out)
+	measured := out
+	if paneW > 0 {
+		// Simulate what lipgloss.JoinHorizontal does in production:
+		// render the pane string at the pane width so long lines wrap,
+		// THEN count visual rows. Without this we count source \n only
+		// and miss the bug class where a 277-char description line
+		// reports as 1 row but renders as 7.
+		measured = lipgloss.NewStyle().Width(paneW).Render(out)
+	}
+	if h := lipgloss.Height(measured); h > paneH {
+		t.Errorf("rendered %d visual rows at paneW=%d, exceeds pane height %d:\n%s", h, paneW, paneH, out)
 	}
 }

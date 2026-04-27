@@ -56,7 +56,7 @@ type Model struct {
 	previewKey    string
 	detailFocus   detailFocus
 	scrollMem     map[string]int
-	previewBodies map[string][]byte
+	previewCache  *diffBodyCache
 
 	pendingAction pendingAction // empty action == no prompt
 
@@ -86,7 +86,7 @@ func New(cfg config.Config, client *ado.Client) Model {
 		user:          "loading…",
 		useDelta:      gitlocal.HasDelta(),
 		scrollMem:     map[string]int{},
-		previewBodies: map[string][]byte{},
+		previewCache:  newDiffBodyCache(5),
 		expandedThread: map[int]bool{},
 	}
 	st, err := cache.New()
@@ -336,7 +336,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.preview, cmd = m.preview.Update(msg)
 		if msg.err == nil && m.previewKey != "" {
-			m.previewBodies[m.previewKey] = msg.content
+			m.previewCache.Set(m.detail.Summary().ID, m.previewKey, msg.content)
 		}
 		if off, ok := m.scrollMem[m.previewKey]; ok {
 			m.preview.vp.SetYOffset(off)
@@ -345,9 +345,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case prefetchLoadedMsg:
 		if msg.err == nil {
-			m.previewBodies[msg.key] = msg.content
+			m.previewCache.Set(m.detail.Summary().ID, msg.key, msg.content)
 		} else {
-			delete(m.previewBodies, msg.key)
+			m.previewCache.Drop(msg.key)
 		}
 		return m, nil
 	case jumpRequestedMsg:
@@ -438,10 +438,11 @@ func (m Model) openDetail(s ado.PRSummary) (Model, tea.Cmd) {
 	m.previewKey = ""
 	m.detailFocus = focusFiles
 	m.scrollMem = map[string]int{}
-	m.previewBodies = map[string][]byte{}
 	m.threads = nil
 	m.expandedThread = map[int]bool{}
 	m.screen = screenDetail
+	// NOTE: previewCache survives PR re-open so bouncing list↔detail
+	// stays snappy. Refresh (R) explicitly clears the current PR below.
 	if m.cache != nil {
 		if err := m.cache.RecordVisit(s); err != nil {
 			slog.Warn("cache: record visit", "pr", s.ID, "err", err)
@@ -517,7 +518,7 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.preview = m.sizeDiffModel(NewDiff(m.keys), diffTargetPreview)
 		m.previewKey = ""
 		m.scrollMem = map[string]int{}
-		m.previewBodies = map[string][]byte{}
+		m.previewCache.ClearPR(m.detail.Summary().ID)
 		return m, m.loadDetail(m.detail.Summary())
 	case keyMatches(msg, m.keys.Browser):
 		u := m.detail.Summary().URL
@@ -662,7 +663,7 @@ func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
 	m.previewKey = key
 
 	// Cache hit: render immediately (no async msg) and prefetch neighbors.
-	if body, ok := m.previewBodies[key]; ok && body != nil {
+	if body, ok := m.previewCache.Get(key); ok && body != nil {
 		renderer := "rest"
 		if p, ok := m.git.Find(m.detail.Summary().Repo, m.cfg.Org); ok && p != "" {
 			if m.useDelta {
@@ -710,19 +711,24 @@ func (m Model) prefetchNeighbors() (Model, tea.Cmd) {
 	}
 	d := m.detail.Detail()
 	files := m.detail.files
-	cur := m.detail.cursor
+	prID := m.detail.Summary().ID
+	// Prefetch the ±3 nearest files in DISPLAY order so the cache warms
+	// the rows the user will actually navigate to with j/k, not the
+	// API-order neighbors that rarely match the sorted tree.
+	const radius = 3
+	idxs := m.detail.DisplayNeighbors(radius)
 	var cmds []tea.Cmd
-	for _, idx := range []int{cur - 1, cur + 1} {
+	for _, idx := range idxs {
 		if idx < 0 || idx >= len(files) {
 			continue
 		}
 		f := files[idx]
 		key := diffSelectionKey(d.SourceSha, d.TargetSha, f.Path)
-		if _, ok := m.previewBodies[key]; ok {
+		if _, ok := m.previewCache.Get(key); ok {
 			continue
 		}
 		// Reserve cache slot (nil) so we don't re-issue while in flight.
-		m.previewBodies[key] = nil
+		m.previewCache.Reserve(prID, key)
 		cmds = append(cmds, m.prefetchOne(f, key, d.SourceSha, d.TargetSha))
 	}
 	if len(cmds) == 0 {

@@ -146,6 +146,41 @@ func (m DetailModel) neighborFile(delta int) int {
 	return order[pos]
 }
 
+// DisplayNeighbors returns up to `radius` file indices on each side of
+// the cursor, walked in **display order** (the sorted/grouped tree).
+// Used by the preview prefetcher so it warms the bodies the user is
+// most likely to navigate to next, not the API-order neighbors which
+// rarely match what's on screen.
+func (m DetailModel) DisplayNeighbors(radius int) []int {
+	if radius <= 0 || len(m.files) == 0 {
+		return nil
+	}
+	rows := buildFileTree(m.files)
+	order := make([]int, 0, len(m.files))
+	for _, r := range rows {
+		if !r.isDir {
+			order = append(order, r.fileIdx)
+		}
+	}
+	pos := 0
+	for i, idx := range order {
+		if idx == m.cursor {
+			pos = i
+			break
+		}
+	}
+	out := make([]int, 0, 2*radius)
+	for d := 1; d <= radius; d++ {
+		if pos-d >= 0 {
+			out = append(out, order[pos-d])
+		}
+		if pos+d < len(order) {
+			out = append(out, order[pos+d])
+		}
+	}
+	return out
+}
+
 func (m DetailModel) View() string { return m.ViewWithFocus(true) }
 
 func (m DetailModel) FilesHeader(focused bool) string {
@@ -174,6 +209,16 @@ func (m DetailModel) effectiveWidth() int {
 
 func (m DetailModel) ViewWithFocus(focused bool) string {
 	header := m.renderHeader(focused)
+	// Pre-wrap the header at the actual pane width BEFORE measuring.
+	// Long lines (long repo+branch line, dense reviewer list, single
+	// long description line) report as 1 source line but render as
+	// several visual rows once the parent pane wraps them. If we don't
+	// wrap-then-measure, the file-list budget is wrong and the total
+	// view exceeds bodyHeight, causing the terminal to scroll and clip
+	// the top of the pane.
+	if w := m.effectiveWidth(); w > 0 {
+		header = lipgloss.NewStyle().Width(w).Render(header)
+	}
 	header = m.clampHeader(header)
 	filesBlock := m.renderFilesBlock(focused, lipgloss.Height(header))
 	return header + filesBlock

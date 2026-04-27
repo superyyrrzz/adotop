@@ -52,7 +52,7 @@ func TestLivePR1145087HeaderVisible(t *testing.T) {
 
 			out := m.ViewWithFocus(true)
 			fmt.Printf("\n===== pane %dx%d =====\n%s\n", tc.w, tc.h, out)
-			assertHeaderVisible(t, out, d.PRSummary, tc.h)
+			assertHeaderVisible(t, out, d.PRSummary, tc.w, tc.h)
 		})
 	}
 }
