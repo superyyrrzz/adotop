@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/renzeyu/adotop/internal/ado"
 	"github.com/renzeyu/adotop/internal/cache"
@@ -24,6 +25,13 @@ const (
 	screenDiff
 )
 
+type detailFocus int
+
+const (
+	focusFiles detailFocus = iota
+	focusDiff
+)
+
 type Model struct {
 	cfg    config.Config
 	client *ado.Client
@@ -35,14 +43,21 @@ type Model struct {
 	myID   string
 	screen screen
 
-	list   ListModel
-	detail DetailModel
-	diff   DiffModel
+	list    ListModel
+	detail  DetailModel
+	diff    DiffModel
+	preview DiffModel
 
 	width, height int
 	footerErr     string
 	showHelp      bool
 	useDelta      bool
+	previewReqID  int
+	diffReqID     int
+	previewKey    string
+	detailFocus   detailFocus
+	scrollMem     map[string]int
+	previewBodies map[string][]byte
 }
 
 func New(cfg config.Config, client *ado.Client) Model {
@@ -55,8 +70,11 @@ func New(cfg config.Config, client *ado.Client) Model {
 		list:     NewList(keys),
 		detail:   NewDetail(keys),
 		diff:     NewDiff(keys),
-		user:     "loading…",
-		useDelta: gitlocal.HasDelta(),
+		preview:  NewDiff(keys),
+		user:          "loading…",
+		useDelta:      gitlocal.HasDelta(),
+		scrollMem:     map[string]int{},
+		previewBodies: map[string][]byte{},
 	}
 	st, err := cache.New()
 	if err != nil {
@@ -139,7 +157,7 @@ func (m Model) loadDetail(s ado.PRSummary) tea.Cmd {
 	)
 }
 
-func (m Model) loadDiff(s ado.PRSummary, file ado.FileChange, sourceSha, targetSha string) (DiffModel, tea.Cmd) {
+func (m Model) loadDiff(target diffTarget, current DiffModel, requestID int, s ado.PRSummary, file ado.FileChange, sourceSha, targetSha string) (DiffModel, tea.Cmd) {
 	renderer := "rest"
 	var clonePath string
 	if p, ok := m.git.Find(s.Repo, m.cfg.Org); ok {
@@ -150,19 +168,19 @@ func (m Model) loadDiff(s ado.PRSummary, file ado.FileChange, sourceSha, targetS
 			renderer = "local"
 		}
 	}
-	dm := m.diff.SetHeader(file.Path, renderer)
+	dm := m.sizeDiffModel(current.SetHeader(file.Path, renderer), target)
 	cmd := func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if clonePath != "" {
 			out, err := gitlocal.Diff(ctx, clonePath, targetSha, sourceSha, strings.TrimPrefix(file.Path, "/"), m.useDelta)
-			return diffLoadedMsg{content: out, err: err}
+			return diffLoadedMsg{content: out, err: err, target: target, requestID: requestID}
 		}
 		src, tgt, err := m.client.GetFileContents(ctx, s.RepoID, file.Path, sourceSha, targetSha)
 		if err != nil {
-			return diffLoadedMsg{err: err}
+			return diffLoadedMsg{err: err, target: target, requestID: requestID}
 		}
-		return diffLoadedMsg{content: simpleDiff(tgt, src, file.Path)}
+		return diffLoadedMsg{content: simpleDiff(tgt, src, file.Path), target: target, requestID: requestID}
 	}
 	return dm, cmd
 }
@@ -171,11 +189,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		var c1, c2, c3 tea.Cmd
+		var c1, c2 tea.Cmd
 		m.list, c1 = m.list.Update(msg)
 		m.detail, c2 = m.detail.Update(msg)
-		m.diff, c3 = m.diff.Update(msg)
-		return m, tea.Batch(c1, c2, c3)
+		m.diff = m.sizeDiffModel(m.diff, diffTargetFull)
+		m.preview = m.sizeDiffModel(m.preview, diffTargetPreview)
+		return m, tea.Batch(c1, c2)
 	case connDataMsg:
 		if msg.err != nil {
 			m.footerErr = "auth: " + msg.err.Error()
@@ -206,6 +225,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.list, cmd = m.list.Update(msg)
 		return m, cmd
+	case detailLoadedMsg:
+		var cmd tea.Cmd
+		m.detail, cmd = m.detail.Update(msg)
+		m, previewCmd := m.queuePreviewForSelection()
+		return m, tea.Batch(cmd, previewCmd)
+	case filesLoadedMsg:
+		var cmd tea.Cmd
+		m.detail, cmd = m.detail.Update(msg)
+		m, previewCmd := m.queuePreviewForSelection()
+		return m, tea.Batch(cmd, previewCmd)
+	case statusesLoadedMsg:
+		var cmd tea.Cmd
+		m.detail, cmd = m.detail.Update(msg)
+		return m, cmd
+	case diffLoadedMsg:
+		switch msg.target {
+		case diffTargetPreview:
+			if msg.requestID != m.previewReqID {
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.preview, cmd = m.preview.Update(msg)
+			return m, cmd
+		default:
+			if msg.requestID != m.diffReqID {
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.diff, cmd = m.diff.Update(msg)
+			return m, cmd
+		}
 	case tea.KeyMsg:
 		if keyMatches(msg, m.keys.Quit) {
 			return m, tea.Quit
@@ -251,6 +301,11 @@ func (m Model) updateListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyMatches(msg, m.keys.Open):
 		if s, ok := m.list.Selected(); ok {
 			m.detail = m.detail.SetSummary(s)
+			m.preview = m.sizeDiffModel(NewDiff(m.keys), diffTargetPreview)
+			m.previewKey = ""
+			m.detailFocus = focusFiles
+			m.scrollMem = map[string]int{}
+			m.previewBodies = map[string][]byte{}
 			m.screen = screenDetail
 			return m, m.loadDetail(s)
 		}
@@ -269,26 +324,61 @@ func (m Model) updateListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
+	case msg.Type == tea.KeyTab:
+		if m.detailFocus == focusFiles {
+			m.detailFocus = focusDiff
+		} else {
+			m.detailFocus = focusFiles
+		}
+		return m, nil
+	case msg.Type == tea.KeyShiftTab:
+		if m.detailFocus == focusDiff {
+			m.detailFocus = focusFiles
+		} else {
+			m.detailFocus = focusDiff
+		}
+		return m, nil
 	case keyMatches(msg, m.keys.Back):
 		m.screen = screenList
+		m.detailFocus = focusFiles
 		return m, nil
 	case keyMatches(msg, m.keys.Open):
 		f, ok := m.detail.SelectedFile()
 		if !ok || m.detail.Detail() == nil {
 			return m, nil
 		}
-		dm, cmd := m.loadDiff(m.detail.Summary(), f, m.detail.Detail().SourceSha, m.detail.Detail().TargetSha)
+		key := diffSelectionKey(m.detail.Detail().SourceSha, m.detail.Detail().TargetSha, f.Path)
+		if key == m.previewKey && m.preview.loaded {
+			m.diff = m.sizeDiffModel(m.preview, diffTargetFull)
+			m.diff.vp.GotoTop()
+			m.screen = screenDiff
+			return m, nil
+		}
+		m.diffReqID++
+		dm, cmd := m.loadDiff(diffTargetFull, m.diff, m.diffReqID, m.detail.Summary(), f, m.detail.Detail().SourceSha, m.detail.Detail().TargetSha)
 		m.diff = dm
 		m.screen = screenDiff
 		return m, cmd
 	case keyMatches(msg, m.keys.Refresh):
+		m.preview = m.sizeDiffModel(NewDiff(m.keys), diffTargetPreview)
+		m.previewKey = ""
 		return m, m.loadDetail(m.detail.Summary())
 	case keyMatches(msg, m.keys.Browser):
 		OpenInBrowser(m.detail.Summary().URL)
 		return m, nil
+	case keyMatches(msg, m.keys.PgUp), keyMatches(msg, m.keys.PgDn), keyMatches(msg, m.keys.GotoTop), keyMatches(msg, m.keys.GotoEnd):
+		var cmd tea.Cmd
+		m.preview, cmd = m.preview.Update(msg)
+		return m, cmd
 	}
+	before, beforeOK := m.detail.SelectedFile()
 	var cmd tea.Cmd
 	m.detail, cmd = m.detail.Update(msg)
+	after, afterOK := m.detail.SelectedFile()
+	if afterOK && (!beforeOK || before.Path != after.Path) {
+		m, previewCmd := m.queuePreviewForSelection()
+		return m, tea.Batch(cmd, previewCmd)
+	}
 	return m, cmd
 }
 
@@ -313,7 +403,7 @@ func (m Model) View() string {
 	case screenList:
 		body = m.list.View()
 	case screenDetail:
-		body = m.detail.View()
+		body = m.detailPreviewView()
 	case screenDiff:
 		body = m.diff.View()
 	}
@@ -328,9 +418,11 @@ func (m Model) View() string {
 			"  /           filter (list)",
 			"  tab / l     next tab",
 			"  shift+tab/h prev tab",
-			"  enter       open selected",
+			"  enter       open selected / full diff",
 			"  esc         back",
-			"  g / G       top / bottom (diff)",
+			"  ↑↓          move files + auto-preview",
+			"  pgup/pgdn   scroll preview/diff",
+			"  g / G       top / bottom (preview/diff)",
 		}, "\n"))
 	}
 	footer := Footer.Render(footerHints(m.screen))
@@ -345,11 +437,135 @@ func footerHints(s screen) string {
 	case screenList:
 		return "/:filter  enter:open  o:browser  r:refresh  tab:next  ?:help  q:quit"
 	case screenDetail:
-		return "↑↓:files  enter:diff  o:browser  esc:back  r:refresh  ?:help  q:quit"
+		return "↑↓:files  pgup/pgdn g/G:preview  enter:full diff  o:browser  esc:back  r:refresh  ?:help  q:quit"
 	case screenDiff:
 		return "↑↓ pgup/pgdn g/G:scroll  esc:back  o:browser  ?:help  q:quit"
 	}
 	return ""
+}
+
+func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
+	if m.screen != screenDetail || m.detail.Detail() == nil {
+		return m, nil
+	}
+	f, ok := m.detail.SelectedFile()
+	if !ok {
+		return m, nil
+	}
+	key := diffSelectionKey(m.detail.Detail().SourceSha, m.detail.Detail().TargetSha, f.Path)
+	if key == m.previewKey {
+		return m, nil
+	}
+	m.previewKey = key
+	m.previewReqID++
+	pm, cmd := m.loadDiff(diffTargetPreview, m.preview, m.previewReqID, m.detail.Summary(), f, m.detail.Detail().SourceSha, m.detail.Detail().TargetSha)
+	m.preview = pm
+	return m, cmd
+}
+
+func (m Model) detailPreviewView() string {
+	layout := m.detailLayout()
+	left := m.detail.View()
+	right := m.previewPaneView()
+	if !layout.split {
+		return strings.Join([]string{left, "", right}, "\n")
+	}
+	leftPane := lipgloss.NewStyle().
+		Width(layout.leftWidth).
+		MaxWidth(layout.leftWidth).
+		Height(layout.bodyHeight).
+		Render(left)
+	rightPane := lipgloss.NewStyle().
+		BorderLeft(true).
+		BorderForeground(lipgloss.Color("8")).
+		PaddingLeft(1).
+		Width(layout.rightWidth).
+		MaxWidth(layout.rightWidth).
+		Height(layout.bodyHeight).
+		Render(right)
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, rightPane)
+}
+
+func (m Model) previewPaneView() string {
+	title := Header.Render("Diff Preview")
+	if m.preview.file == "" {
+		if _, ok := m.detail.SelectedFile(); !ok {
+			return title + "\n" + Faint.Render("No changed files available.")
+		}
+		return title + "\n" + Faint.Render("Loading selected file diff…")
+	}
+	return title + "\n" + m.preview.View()
+}
+
+type previewLayout struct {
+	split      bool
+	bodyHeight int
+	leftWidth  int
+	rightWidth int
+}
+
+func (m Model) detailLayout() previewLayout {
+	layout := previewLayout{
+		bodyHeight: maxInt(10, m.height-4),
+		leftWidth:  80,
+		rightWidth: 80,
+	}
+	if m.width <= 0 {
+		return layout
+	}
+	if m.width < 100 {
+		layout.leftWidth = m.width
+		layout.rightWidth = m.width
+		return layout
+	}
+	left := m.width * 2 / 5
+	left = maxInt(36, minInt(left, m.width-40))
+	right := maxInt(30, m.width-left-1)
+	if right < 30 {
+		layout.leftWidth = m.width
+		layout.rightWidth = m.width
+		return layout
+	}
+	layout.split = true
+	layout.leftWidth = left
+	layout.rightWidth = right
+	return layout
+}
+
+func (m Model) sizeDiffModel(dm DiffModel, target diffTarget) DiffModel {
+	width, height := m.diffViewportSize(target)
+	return dm.SetSize(width, height)
+}
+
+func (m Model) diffViewportSize(target diffTarget) (int, int) {
+	switch target {
+	case diffTargetPreview:
+		layout := m.detailLayout()
+		if layout.split {
+			return maxInt(20, layout.rightWidth-2), maxInt(3, layout.bodyHeight-2)
+		}
+		return maxInt(20, layout.rightWidth), maxInt(6, layout.bodyHeight/2-2)
+	default:
+		return maxInt(20, m.width), maxInt(3, m.height-5)
+	}
+}
+
+func diffSelectionKey(sourceSha, targetSha, path string) string {
+	return sourceSha + "\x00" + targetSha + "\x00" + path
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func orPlaceholder(s, p string) string {
