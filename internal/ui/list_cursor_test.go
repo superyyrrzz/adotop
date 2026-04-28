@@ -10,13 +10,18 @@ import (
 	"github.com/renzeyu/adotop/internal/ado"
 )
 
-// TestCursorRowHasBarMarker is the regression guard for the cursor
-// styling refresh: the highlighted row must carry a "▌" gutter and the
-// non-highlighted rows must not. Before this change the cursor row was
-// rendered with Selected.Reverse(true), inverting the entire two-line
-// block and producing a flat sea of grey that fought with the vote
-// chips and pill backgrounds.
-func TestCursorRowHasBarMarker(t *testing.T) {
+// TestCursorRowIsBracketed is the regression guard for the cursor
+// styling: the highlighted row must be wrapped in a mauve rounded
+// frame (top corner ╭, side rails │, bottom corner ╰) and the
+// non-highlighted rows must not carry frame characters.
+//
+// History: this replaced an earlier "▌" gutter marker, which itself
+// replaced a Selected.Reverse(true) approach. The bracket is the
+// strongest signal of the three because it visually contains the row
+// instead of just decorating its left edge — important on wide
+// terminals where the leftmost column is far from where the user's
+// eyes track.
+func TestCursorRowIsBracketed(t *testing.T) {
 	now := time.Now()
 	prs := []ado.PRSummary{
 		{ID: 1, Title: "first", Author: "a", SourceBranch: "f", TargetBranch: "main", CreatedAt: now},
@@ -27,15 +32,11 @@ func TestCursorRowHasBarMarker(t *testing.T) {
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 200, Height: 30})
 	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: prs})
 
-	// Move the cursor to row 1 (the middle PR).
 	m.cursor = 1
 
 	out := m.View()
 	lines := strings.Split(out, "\n")
 
-	// Build a flat list of "PR rows" — both halves of the 2-line block
-	// for each PR. We detect them by looking for "#<id>" or by the meta
-	// strip immediately after.
 	var firstRowIdx, secondRowIdx, thirdRowIdx = -1, -1, -1
 	for i, ln := range lines {
 		switch {
@@ -53,20 +54,28 @@ func TestCursorRowHasBarMarker(t *testing.T) {
 		}
 	}
 
-	// Cursor row (second PR) must carry the ▌ marker on both lines.
-	if !strings.Contains(lines[secondRowIdx], "▌") {
-		t.Fatalf("cursor row first line missing ▌ marker:\n%s", lines[secondRowIdx])
+	// Cursor row (second PR) must carry the side rail │ on both
+	// lines, and the line above must be the top corner ╭, the line
+	// below the bottom corner ╰.
+	if !strings.Contains(lines[secondRowIdx], "│") {
+		t.Fatalf("cursor row first line missing │ side rail:\n%s", lines[secondRowIdx])
 	}
-	if secondRowIdx+1 >= len(lines) || !strings.Contains(lines[secondRowIdx+1], "▌") {
-		t.Fatalf("cursor row second line missing ▌ marker:\n%s", lines[secondRowIdx+1])
+	if secondRowIdx+1 >= len(lines) || !strings.Contains(lines[secondRowIdx+1], "│") {
+		t.Fatalf("cursor row second line missing │ side rail:\n%s", lines[secondRowIdx+1])
+	}
+	if secondRowIdx-1 < 0 || !strings.Contains(lines[secondRowIdx-1], "╭") {
+		t.Fatalf("cursor row should be preceded by ╭ top border:\n%s", lines[secondRowIdx-1])
+	}
+	if secondRowIdx+2 >= len(lines) || !strings.Contains(lines[secondRowIdx+2], "╰") {
+		t.Fatalf("cursor row should be followed by ╰ bottom border:\n%s", lines[secondRowIdx+2])
 	}
 
-	// Non-cursor rows must NOT carry the marker.
-	if strings.Contains(lines[firstRowIdx], "▌") {
-		t.Fatalf("non-cursor row #1 should not have ▌ marker:\n%s", lines[firstRowIdx])
+	// Non-cursor rows must NOT carry frame side rails.
+	if strings.Contains(lines[firstRowIdx], "│") {
+		t.Fatalf("non-cursor row #1 should not have │ frame:\n%s", lines[firstRowIdx])
 	}
-	if strings.Contains(lines[thirdRowIdx], "▌") {
-		t.Fatalf("non-cursor row #3 should not have ▌ marker:\n%s", lines[thirdRowIdx])
+	if strings.Contains(lines[thirdRowIdx], "│") {
+		t.Fatalf("non-cursor row #3 should not have │ frame:\n%s", lines[thirdRowIdx])
 	}
 }
 
@@ -84,8 +93,6 @@ func TestCursorRowHasNoReverseStyle(t *testing.T) {
 	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: prs})
 
 	out := m.View()
-	// SGR reverse is "\x1b[7m" (sometimes joined with other params, e.g.
-	// "\x1b[1;7m"). Either form would have appeared from the old code.
 	if strings.Contains(out, "\x1b[7m") || strings.Contains(out, ";7m") {
 		t.Fatalf("rendered list still contains SGR reverse — Selected.Reverse leak:\n%q", out)
 	}

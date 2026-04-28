@@ -46,6 +46,11 @@ func (m ListModel) Tab() ado.Tab { return m.tab }
 //   - non-compact (two-line) row: 1 data line + 1 meta line + 1 separator = 3
 //   - compact (one-line) row:     1 data line + 1 separator           = 2
 //
+// The selected row is wrapped in a mauve rounded frame, which adds
+// 2 lines (top + bottom border) to that one row. The bottom border
+// replaces the inter-row separator so net cost is +2 lines per
+// window, not per row. We bake that +2 into the chrome budget.
+//
 // Chrome above/below the list rows we have to leave room for:
 //   - topbar bar + rule                  = 2
 //   - blank between header and body      = 1
@@ -58,16 +63,17 @@ func (m ListModel) Tab() ado.Tab { return m.tab }
 //                                            pager doesn't shove rows
 //                                            out of view at the moment
 //                                            it appears)
+//   - selection bracket extra lines      = 2
 //
-// Total chrome = 9. Underestimating chrome scrolls the topbar and tab
-// strip off the top of the alt-screen, which is how the "topbar
+// Total chrome = 11. Underestimating chrome scrolls the topbar and
+// tab strip off the top of the alt-screen, which is how the "topbar
 // disappears" bug manifests in tall lists.
 func (m ListModel) window(total int) (int, int) {
 	rowLines := 3
 	if m.width > 0 && m.width < 90 {
 		rowLines = 2
 	}
-	const chrome = 9
+	const chrome = 11
 	if m.height <= 0 {
 		return 0, total
 	}
@@ -358,7 +364,7 @@ func (m ListModel) View() string {
 		b.WriteString(Faint.Render("No PRs in this tab.\n"))
 	} else {
 		header := fmt.Sprintf("%s%s %s %s %s %s   %s   %s",
-			cursorGutter,
+			rowIndent,
 			padCols("ID", cols.id),
 			padCols("State", stateColWidth),
 			padCols("Title", cols.title),
@@ -373,27 +379,22 @@ func (m ListModel) View() string {
 		// metadata band would wrap. We fall back to the original glyph
 		// strip in that case so users on small windows aren't punished.
 		compactRows := m.width > 0 && m.width < 90
+		// Bracket the selected row in a mauve rounded frame. To keep
+		// columns aligned across selected/unselected rows, every row
+		// gets the same 1-char left+right inset; the bracket border
+		// occupies that inset on the selected row, plain spaces on the
+		// others. The frame adds 2 lines (top/bottom border) to the
+		// selected row — window() compensates so the visible window
+		// still fits.
 		for i := start; i < end; i++ {
 			p := rows[i]
 			stateText, stateStyle := prStateBadgeCompact(p)
 			pill := stateStyle.Render(stateText)
-			// Pad the *visible* width to stateColWidth so the Title
-			// column lines up across rows. lipgloss.Width strips ANSI.
 			pad := stateColWidth - lipgloss.Width(pill)
 			if pad > 0 {
 				pill += strings.Repeat(" ", pad)
 			}
-			// Cursor marker: the leftmost column carries a colored bar
-			// for the highlighted row, a plain space for everything else.
-			// This replaced an old Selected.Reverse(true) that inverted
-			// the entire 2-line block, which fought visually with the
-			// vote chips and pill backgrounds.
-			gutter := cursorGutter
-			if i == m.cursor {
-				gutter = Cursor.Render("▌") + " "
-			}
-			line := fmt.Sprintf("%s%s %s %s %s %s → %s   %s",
-				gutter,
+			line := fmt.Sprintf("%s %s %s %s %s → %s   %s",
 				padCols(fmt.Sprintf("#%d", p.ID), cols.id),
 				pill,
 				truncCols(p.Title, cols.title),
@@ -403,21 +404,23 @@ func (m ListModel) View() string {
 				padCols(age(p.CreatedAt), cols.age))
 			var meta string
 			if compactRows {
-				// Narrow terminal: keep original glyph strip.
 				meta = "    " + voteGlyphs(p.Reviewers)
 			} else {
 				meta = "    " + voteChips(p.Reviewers)
 			}
-			// Second line of the row also gets the bar so the cursor
-			// reads as one block from top to bottom.
-			metaLine := gutter + meta
-			block := line + "\n" + metaLine
-			b.WriteString(block)
+			block := line + "\n" + meta
+			if i == m.cursor {
+				b.WriteString(renderSelectedRow(block, m.rowSeparatorWidth()))
+			} else {
+				// Indent unselected rows by one column on each side so
+				// they sit under the bracket's interior.
+				b.WriteString(indentRowBlock(block))
+			}
 			b.WriteString("\n")
-			// Faint separator between rows (skip after the last one
-			// in the visible window so the section doesn't end on a
-			// rule).
-			if i < end-1 {
+			// Inter-row separator. Skip after the last visible row, AND
+			// skip immediately after the bracketed row — its bottom
+			// border already serves as the separator.
+			if i < end-1 && i != m.cursor {
 				b.WriteString(Faint.Render(strings.Repeat("─", m.rowSeparatorWidth())))
 				b.WriteString("\n")
 			}
@@ -442,11 +445,39 @@ func (m ListModel) View() string {
 // 2-char cushion so neighbouring columns don't kiss the badge.
 const stateColWidth = 12
 
-// cursorGutter is the leftmost two columns reserved for the cursor
-// marker. Plain spaces on non-selected rows; "▌ " (in the cursor
-// color) on the selected row. Defined once so the header alignment
-// can subtract the same prefix.
-const cursorGutter = "  "
+// rowIndent is the leftmost two columns reserved as a uniform inset
+// for every PR row. On the selected row those two columns are taken
+// up by the mauve bracket frame ("│ "); on every other row they're
+// plain spaces. Defined once so the column header alignment lines up
+// with the data rows under either path.
+const rowIndent = "  "
+
+// renderSelectedRow wraps a row's two-line block in a mauve rounded
+// frame. The frame's interior has 1 col of horizontal padding so the
+// content starts at column 2 — matching the 2-col rowIndent on
+// unselected rows. We deliberately do NOT set Width: forcing a width
+// makes lipgloss wrap the long data line (which already extends past
+// the typical separator). Letting the frame auto-size to its widest
+// inner line means the bottom border may not span the full row, but
+// the row's existing data stays on one line which matters more.
+func renderSelectedRow(block string, sepWidth int) string {
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(Cursor.GetForeground()).
+		Padding(0, 1).
+		Render(block)
+}
+
+// indentRowBlock prefixes both lines of a non-selected row with the
+// uniform rowIndent so its columns line up under the bracketed row's
+// interior.
+func indentRowBlock(block string) string {
+	lines := strings.Split(block, "\n")
+	for i, ln := range lines {
+		lines[i] = rowIndent + ln
+	}
+	return strings.Join(lines, "\n")
+}
 
 // listCols holds the rendered widths of each column in the PR list.
 // Title is the elastic column — it absorbs slack space when the terminal
