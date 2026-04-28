@@ -88,7 +88,7 @@ func (m Model) previewCommentsBlock() string {
 		return ""
 	}
 	threads := m.threadsForFile(f.Path)
-	return renderCommentsBlock(threads, m.expandedThread, m.showResolved, m.threads, f.Path)
+	return renderCommentsBlock(threads, m.expandedThread, m.showResolved, m.threads, f.Path, m.preview.vp.Width)
 }
 
 // composeDiffWithComments stitches the rendered diff and the comments block
@@ -104,7 +104,11 @@ func composeDiffWithComments(diffBody []byte, commentsBlock string) string {
 // renderCommentsBlock formats the threads attached to a file. Each thread
 // shows the first comment plus a `[N replies]` suffix; expanded threads
 // show every comment. Header summarizes total open / hidden-resolved count.
-func renderCommentsBlock(threads []ado.Thread, expanded map[int]bool, showResolved bool, all []ado.Thread, path string) string {
+//
+// width is the diff viewport width; it bounds how wide the wrapped body
+// lines of expanded threads may go. Pass 0 to skip wrapping (long lines
+// will extend off the right edge).
+func renderCommentsBlock(threads []ado.Thread, expanded map[int]bool, showResolved bool, all []ado.Thread, path string, width int) string {
 	if len(threads) == 0 && !hasAnyForFile(all, path) {
 		return ""
 	}
@@ -129,7 +133,7 @@ func renderCommentsBlock(threads []ado.Thread, expanded map[int]bool, showResolv
 		return b.String()
 	}
 	for _, t := range threads {
-		b.WriteString(renderThread(t, expanded[t.ID]))
+		b.WriteString(renderThread(t, expanded[t.ID], width))
 	}
 	return b.String()
 }
@@ -143,7 +147,21 @@ func hasAnyForFile(all []ado.Thread, path string) bool {
 	return false
 }
 
-func renderThread(t ado.Thread, expand bool) string {
+// renderThread emits one thread.
+//
+// Collapsed: a single line with the first comment squeezed to fit, plus
+// a "[N more — enter to expand]" cue when there are replies. This is
+// the default density-optimized form.
+//
+// Expanded: a header line with location + author, then the full first
+// comment body wrapped to width, followed by each reply with author
+// label + wrapped body. Newlines in the body survive as real newlines;
+// long unwrapped lines are hard-wrapped at width.
+//
+// width is the viewport width. 0 disables wrapping (long lines extend
+// off the right edge — only used by callers that don't have a width
+// available, like tests).
+func renderThread(t ado.Thread, expand bool, width int) string {
 	if len(t.Comments) == 0 {
 		return ""
 	}
@@ -159,24 +177,117 @@ func renderThread(t ado.Thread, expand bool) string {
 	if t.IsResolved() {
 		bullet = "✓"
 	}
-	head := fmt.Sprintf("  %s %s  %s: %s",
-		bullet, Faint.Render(loc), Header.Render(first.Author), squeezeOneLine(first.Content, 200))
+
+	if !expand {
+		head := fmt.Sprintf("  %s %s  %s: %s",
+			bullet, Faint.Render(loc), Header.Render(first.Author), squeezeOneLine(first.Content, 200))
+		if t.IsResolved() {
+			head = Faint.Render(head)
+		}
+		b.WriteString(head)
+		if len(t.Comments) > 1 {
+			b.WriteString(Faint.Render(fmt.Sprintf("  [%d more — enter to expand]", len(t.Comments)-1)))
+		}
+		b.WriteString("\n")
+		return b.String()
+	}
+
+	// Expanded form. Header carries location + author of the OP; the
+	// body is rendered on its own indented lines so newlines and code
+	// blocks stay readable.
+	const bodyIndent = "      "
+	head := fmt.Sprintf("  %s %s  %s:", bullet, Faint.Render(loc), Header.Render(first.Author))
 	if t.IsResolved() {
 		head = Faint.Render(head)
 	}
 	b.WriteString(head)
-	if !expand && len(t.Comments) > 1 {
-		b.WriteString(Faint.Render(fmt.Sprintf("  [%d more — enter to expand]", len(t.Comments)-1)))
-	}
 	b.WriteString("\n")
-	if expand {
-		for _, c := range t.Comments[1:] {
-			b.WriteString(fmt.Sprintf("      %s: %s\n",
-				Header.Render(c.Author),
-				squeezeOneLine(c.Content, 1000)))
+	b.WriteString(wrapBodyLines(first.Content, bodyIndent, width))
+	for _, c := range t.Comments[1:] {
+		b.WriteString(fmt.Sprintf("  ↳ %s:\n", Header.Render(c.Author)))
+		b.WriteString(wrapBodyLines(c.Content, bodyIndent, width))
+	}
+	return b.String()
+}
+
+// wrapBodyLines renders a comment body across multiple lines.
+//
+// Each source line (split on \n) is hard-wrapped at width-len(indent) so
+// the visible right edge of the comment respects the viewport. width=0
+// disables wrapping.
+//
+// Trailing newline is always emitted so the next thread starts cleanly.
+func wrapBodyLines(body, indent string, width int) string {
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	body = strings.TrimRight(body, "\n")
+	if body == "" {
+		return ""
+	}
+	max := width - len(indent)
+	if width <= 0 || max < 10 {
+		// No useful budget — emit one line per source line, no wrap.
+		var b strings.Builder
+		for _, ln := range strings.Split(body, "\n") {
+			b.WriteString(indent)
+			b.WriteString(ln)
+			b.WriteString("\n")
+		}
+		return b.String()
+	}
+	var b strings.Builder
+	for _, src := range strings.Split(body, "\n") {
+		if src == "" {
+			b.WriteString(indent)
+			b.WriteString("\n")
+			continue
+		}
+		for _, chunk := range hardWrap(src, max) {
+			b.WriteString(indent)
+			b.WriteString(chunk)
+			b.WriteString("\n")
 		}
 	}
 	return b.String()
+}
+
+// hardWrap splits s into chunks of at most max runes. Word-breaks at
+// spaces when one's available within max; otherwise falls back to a
+// strict rune split so a long URL/identifier still wraps instead of
+// blowing past the right edge.
+func hardWrap(s string, max int) []string {
+	if max <= 0 {
+		return []string{s}
+	}
+	runes := []rune(s)
+	if len(runes) <= max {
+		return []string{s}
+	}
+	var out []string
+	for len(runes) > 0 {
+		if len(runes) <= max {
+			out = append(out, string(runes))
+			break
+		}
+		// Look for the last space in [0, max] to break on.
+		breakAt := -1
+		for i := max; i >= max/2; i-- {
+			if runes[i] == ' ' {
+				breakAt = i
+				break
+			}
+		}
+		if breakAt < 0 {
+			breakAt = max
+		}
+		out = append(out, strings.TrimRight(string(runes[:breakAt]), " "))
+		// Skip the space we broke on.
+		next := breakAt
+		for next < len(runes) && runes[next] == ' ' {
+			next++
+		}
+		runes = runes[next:]
+	}
+	return out
 }
 
 // renderPRDiscussion formats PR-level threads (those not anchored to a
