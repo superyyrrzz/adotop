@@ -23,6 +23,7 @@ const (
 	modeError                     // red:  error or footer error
 	modePending                   // yellow: confirmation prompt awaiting y/n
 	modeMenu                      // magenta: modal overlay (vote menu)
+	modeOK                        // green: write-action success banner
 )
 
 func (s statusMode) label() string {
@@ -33,6 +34,8 @@ func (s statusMode) label() string {
 		return "CONFIRM"
 	case modeMenu:
 		return "MENU"
+	case modeOK:
+		return "OK"
 	}
 	return "NORMAL"
 }
@@ -45,6 +48,8 @@ func (s statusMode) style() lipgloss.Style {
 		return PillWarn
 	case modeMenu:
 		return PillDone
+	case modeOK:
+		return PillGood
 	}
 	return PillNeutral
 }
@@ -95,6 +100,9 @@ func currentMode(m Model) statusMode {
 	if m.footerErr != "" {
 		return modeError
 	}
+	if m.footerOK != "" {
+		return modeOK
+	}
 	return modeNormal
 }
 
@@ -113,7 +121,18 @@ func contextSegments(m Model) []segment {
 		return []segment{{text: m.pendingAction.prompt, style: contextStyle()}}
 	}
 	if m.footerErr != "" {
-		return []segment{{text: m.footerErr, style: contextStyle()}}
+		// Errors get the red bg so they read as the failure they are,
+		// not as another piece of routine context. Without this, the
+		// neutral grey-on-grey pill makes long error messages blend
+		// into the chrome and the user sees only the ERROR mode label
+		// with no clue what went wrong.
+		return []segment{{text: m.footerErr, style: errorContextStyle()}}
+	}
+	if m.footerOK != "" {
+		// Success messages stay neutral — informational, not blocking.
+		// The green OK pill in the mode slot already carries the
+		// "this is good" signal.
+		return []segment{{text: m.footerOK, style: contextStyle()}}
 	}
 	switch m.screen {
 	case screenList:
@@ -149,6 +168,14 @@ func contextSegments(m Model) []segment {
 func hintSegments(m Model) []segment {
 	if m.voteMenu || m.pendingAction.kind != "" {
 		return nil
+	}
+	if m.footerErr != "" {
+		// Error mode: replace the binding hints with a single
+		// "press any key to dismiss" cue. Routine hints would compete
+		// with the error message for the user's attention, and the
+		// binding the user actually needs in this state is "make it
+		// go away".
+		return []segment{{text: "press any key to dismiss", style: hintStyle()}}
 	}
 	var hints []string
 	switch m.screen {
@@ -246,6 +273,14 @@ func joinSegments(segs []segment) string {
 // reads as secondary to the mode segment without being invisible.
 func contextStyle() lipgloss.Style {
 	return PillNeutral
+}
+
+// errorContextStyle paints the error message on the red bg so the user
+// can see at a glance that the line in front of them IS the error,
+// not the usual breadcrumb. Pairs with the ERROR mode pill which
+// already uses the same bg.
+func errorContextStyle() lipgloss.Style {
+	return PillBad
 }
 
 // wrapHint returns the diff-wrap toggle label, with a state suffix so

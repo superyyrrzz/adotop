@@ -93,3 +93,30 @@ func TestStatuslineUsesShortTabLabel(t *testing.T) {
 		t.Fatalf("statusline should use short tab label:\n%s", out)
 	}
 }
+
+// TestStatuslineSurfacesErrorMessage is the regression guard for the
+// "see only ERROR with no clue what failed" complaint. When
+// m.footerErr is set, the rendered statusline must contain the actual
+// message (not just the ERROR mode label) AND the dismiss cue, so the
+// user has the context they need to react.
+func TestStatuslineSurfacesErrorMessage(t *testing.T) {
+	m := newDetailModel(t)
+	m.width = 200
+	m.footerErr = "abandon PR #1145756: pull request is completed"
+
+	out := renderStatusline(m)
+	if !strings.Contains(out, "ERROR") {
+		t.Fatalf("statusline should show ERROR mode pill:\n%s", out)
+	}
+	if !strings.Contains(out, "pull request is completed") {
+		t.Fatalf("statusline should surface the error message text:\n%s", out)
+	}
+	if !strings.Contains(out, "press any key to dismiss") {
+		t.Fatalf("statusline should show dismiss cue in error mode:\n%s", out)
+	}
+	// And the routine binding hints should NOT appear — they would
+	// compete with the error message for attention.
+	if strings.Contains(out, "tab:focus") {
+		t.Fatalf("error mode should drop routine hints, found tab:focus:\n%s", out)
+	}
+}

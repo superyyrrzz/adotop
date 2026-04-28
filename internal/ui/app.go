@@ -50,7 +50,14 @@ type Model struct {
 	preview DiffModel
 
 	width, height int
-	footerErr     string
+	// footerErr is the sticky red banner for write-action failures
+	// (vote/abandon errors, jump-to-PR misses). Cleared on next
+	// keypress; "press any key to dismiss" is shown alongside.
+	footerErr string
+	// footerOK is the sticky neutral banner for write-action successes
+	// ("PR #N abandoned"). Cleared on next keypress; no dismiss cue
+	// because success is informational, not blocking.
+	footerOK string
 	showHelp      bool
 	useDelta      bool
 	previewReqID  int
@@ -575,7 +582,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		slog.Info("action succeeded", "kind", msg.kind, "pr", msg.prID, "notes", msg.notes)
-		m.footerErr = fmt.Sprintf("PR #%d %s", msg.prID, msg.notes)
+		m.footerOK = fmt.Sprintf("PR #%d %s", msg.prID, msg.notes)
 		// Optimistic local update for votes: ADO sometimes echoes the
 		// reviewer back under a different identity descriptor (group vs
 		// user) so the GET-side `rv.ID == myID` match misses and the
@@ -607,6 +614,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, nil
+		}
+		// Any key dismisses a sticky error or success banner. The
+		// "press any key to dismiss" cue in the statusline tells the
+		// user this is what'll happen for errors. Successes also
+		// clear so the banner doesn't follow you across screens.
+		// We do NOT swallow the key — the dismiss is a side effect of
+		// whatever the user typed next, so nav stays fluid.
+		if m.footerErr != "" {
+			m.footerErr = ""
+		}
+		if m.footerOK != "" {
+			m.footerOK = ""
 		}
 		if keyMatches(msg, m.keys.QuitForce) {
 			return m, tea.Quit
