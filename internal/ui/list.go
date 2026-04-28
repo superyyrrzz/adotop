@@ -233,23 +233,36 @@ func (m ListModel) updateFiltering(msg tea.KeyMsg) (ListModel, tea.Cmd) {
 	return m, nil
 }
 
-// renderTabs draws the four-tab top bar with three label widths chosen
-// by m.width so the strip never wraps and pushes the table off-screen.
+// renderTabs draws the four-tab top bar with a width-aware fallback
+// chain so the strip never wraps and pushes the table off-screen. The
+// invariant: lipgloss.Width(strip) <= m.width.
 //
-// Tier A (full): " Recents (12) "        — fits when width >= long sum
-// Tier B (short): " Recent (12) "        — drops to short labels + count
-// Tier C (no count): " Recent "          — narrowest viable form
+// Tiers, widest to narrowest:
 //
-// We always render the active-tab style for the selected tab so the
-// user can still tell which tab they're on at any width. The fallback
-// chain protects the row below the tabs (header + table) from being
-// pushed under the fold.
+//	A. " Recents (12) "   (full labels + counts)
+//	B. " Recents (12) "   (short labels + counts — "Assigned to me" → "Assigned")
+//	C. " Recents "        (short labels, no count)
+//	D. " R  A  C  R "     (single-letter initials; selection still styled)
+//	E. " Recents "        (active tab only — narrowest possible signal)
+//
+// The active tab uses the mauve pill style so it reads as a chip on the
+// strip. Inactive tabs are plain faint text with a single-space gutter
+// between them — no leading marker, since horizontal selection is
+// signalled by the chip itself.
 func (m ListModel) renderTabs() string {
 	full := []string{"Recents", "Assigned to me", "Created by me", "All reviewing"}
 	short := []string{"Recents", "Assigned", "Created", "Reviewing"}
+	initials := []string{"R", "A", "C", "V"} // Recents/Assigned/Created/reViewing
 	w := m.width
+
 	build := func(labels []string, withCount bool) string {
 		var b strings.Builder
+		// Tier D (initials) brackets the active label so selection
+		// survives terminals (and tests) that strip ANSI styling. The
+		// other tiers carry it via the pill background, which is enough
+		// at sane widths but disappears in the bracketless one-letter
+		// form.
+		isInitials := len(labels) > 0 && len(labels[0]) == 1
 		for i, name := range labels {
 			label := " " + name
 			if withCount {
@@ -257,13 +270,24 @@ func (m ListModel) renderTabs() string {
 			}
 			label += " "
 			if ado.Tab(i) == m.tab {
-				b.WriteString(TabOn.Render(label))
+				if isInitials {
+					b.WriteString(TabOn.Render("[" + name + "]"))
+					b.WriteString(" ")
+				} else {
+					b.WriteString(TabOn.Render(label))
+				}
 			} else {
-				b.WriteString(TabOff.Render(label))
+				if isInitials {
+					b.WriteString(TabOff.Render(" " + name + " "))
+					b.WriteString(" ")
+				} else {
+					b.WriteString(TabOff.Render(label))
+				}
 			}
 		}
 		return b.String()
 	}
+
 	candidates := []struct {
 		labels    []string
 		withCount bool
@@ -271,6 +295,7 @@ func (m ListModel) renderTabs() string {
 		{full, true},
 		{short, true},
 		{short, false},
+		{initials, false},
 	}
 	if w <= 0 {
 		return build(full, true)
@@ -281,7 +306,19 @@ func (m ListModel) renderTabs() string {
 			return out
 		}
 	}
-	return build(short, false)
+	// Tier E: even initials don't fit. Render only the active tab so
+	// the user keeps the "where am I" signal even on absurdly narrow
+	// terminals. Brackets carry the selection signal in case ANSI is
+	// stripped (tests, dumb terminals).
+	active := short[int(m.tab)]
+	maxInner := w - 2 // [ + ]
+	if maxInner < 1 {
+		maxInner = 1
+	}
+	if len(active) > maxInner {
+		active = active[:maxInner]
+	}
+	return TabOn.Render("[" + active + "]")
 }
 
 func (m ListModel) View() string {
