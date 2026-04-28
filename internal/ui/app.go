@@ -753,16 +753,7 @@ func (m Model) View() string {
 			"  esc         back",
 		}, "\n"))
 	}
-	footer := Footer.Render(footerHints(m.screen))
-	if m.voteMenu {
-		// Highlight the menu prompt the same way as confirmation prompts
-		// so the user notices the modal state.
-		footer = ErrLine.Render("vote: a=approve  s=approve+suggest  w=wait  r=reject  c=clear  esc=cancel")
-	} else if m.pendingAction.kind != "" {
-		footer = ErrLine.Render(m.pendingAction.prompt)
-	} else if m.footerErr != "" {
-		footer = ErrLine.Render(m.footerErr)
-	}
+	footer := renderStatusline(m)
 	// Pad the body so the footer sticks to the bottom of the terminal,
 	// regardless of how much content the current screen produced.
 	if m.height > 0 {
@@ -778,15 +769,6 @@ func (m Model) View() string {
 	return strings.Join([]string{header, "", body, "", footer}, "\n")
 }
 
-func footerHints(s screen) string {
-	switch s {
-	case screenList:
-		return "/:filter  #:goto  enter:open  o:browser  r:refresh  tab:next  ?:help  q:quit"
-	case screenDetail:
-		return "tab:focus  n/N:file  ↑↓ pgup/pgdn:scroll  gg/G:top/bottom  enter:expand-comments  R:show-resolved  a:approve  v:vote-menu  X:abandon  o:browser  esc/q:back  r:refresh  ?:help"
-	}
-	return ""
-}
 
 func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
 	if m.screen != screenDetail || m.detail.Detail() == nil {
