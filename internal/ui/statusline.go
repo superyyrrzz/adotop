@@ -155,7 +155,7 @@ func hintSegments(m Model) []segment {
 	case screenList:
 		hints = []string{"/:filter", "#:goto", "enter:open", "o:browser", "r:refresh", "tab:next", "?:help", "q:quit"}
 	case screenDetail:
-		base := []string{"tab:focus", "n/N:file", "gg/G:top/end", "enter:expand", "R:show-resolved",
+		base := []string{"tab:focus", "enter:diff/expand", "n/N:file", "gg/G:top/end", "R:show-resolved",
 			"a:approve", "v:vote", "X:abandon", "o:browser", "r:refresh", wrapHint(m), "+/-:context", "?:help", "esc:back"}
 		hints = base
 	}

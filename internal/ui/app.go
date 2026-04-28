@@ -786,6 +786,10 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// Files focus: enter drills into the diff for the selected file.
+		// Mirrors the "enter to open" idiom from the PR list. tab still
+		// works as the symmetric focus toggle for users who learned it.
+		m.detailFocus = focusDiff
 		return m, nil
 	case keyMatches(msg, m.keys.Abandon):
 		s := m.detail.Summary()
