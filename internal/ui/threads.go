@@ -173,7 +173,58 @@ func renderThread(t ado.Thread, expand bool) string {
 	return b.String()
 }
 
-// squeezeOneLine collapses internal whitespace and truncates so a comment
+// renderPRDiscussion formats PR-level threads (those not anchored to a
+// specific file) for the detail header. Returns "" when there are no
+// PR-level threads so the caller can skip the section entirely.
+//
+// Each thread is rendered as one line: status glyph + first author +
+// squeezed first comment, mirroring renderThread but without the file
+// location since these threads have none.
+//
+// We deliberately don't expose expand-all here — the header is fixed
+// height; if you want to read the full thread, the future "thread
+// view" pane (Task 3 in the plan) will host it.
+func renderPRDiscussion(threads []ado.Thread) string {
+	if len(threads) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(Faint.Render(fmt.Sprintf("─ Discussion  (%d) ", len(threads))))
+	b.WriteString("\n")
+	const maxRender = 6
+	for i, t := range threads {
+		if i >= maxRender {
+			b.WriteString(Faint.Render(fmt.Sprintf("  … (%d more)", len(threads)-maxRender)))
+			b.WriteString("\n")
+			break
+		}
+		if len(t.Comments) == 0 {
+			continue
+		}
+		first := t.Comments[0]
+		bullet := "💬"
+		if t.IsResolved() {
+			bullet = "✓"
+		}
+		// Compact one-line form: " 💬 Alice: comment text…  [N more]"
+		line := fmt.Sprintf("  %s %s: %s",
+			bullet,
+			Header.Render(first.Author),
+			squeezeOneLine(first.Content, 140))
+		if len(t.Comments) > 1 {
+			line += Faint.Render(fmt.Sprintf("  [%d more]", len(t.Comments)-1))
+		}
+		if t.IsResolved() {
+			line = Faint.Render(line)
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+
 // preview stays on one row. Newlines become " ¶ " so structure is hinted.
 func squeezeOneLine(s string, max int) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")

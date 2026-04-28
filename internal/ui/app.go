@@ -353,10 +353,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail, cmd = m.detail.Update(msg)
 		return m, cmd
 	case threadsLoadedMsg:
-		if msg.err == nil {
-			m.threads = msg.threads
-			m = m.refreshPreview()
+		if msg.err != nil {
+			slog.Warn("threads: fetch failed", "err", msg.err)
+			return m, nil
 		}
+		m.threads = msg.threads
+		m.detail = m.detail.SetPRThreads(m.threads, m.showResolved)
+		m = m.refreshPreview()
 		return m, nil
 	case diffLoadedMsg:
 		if msg.target != diffTargetPreview {
@@ -603,6 +606,7 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keyMatches(msg, m.keys.ShowResolved):
 		m.showResolved = !m.showResolved
+		m.detail = m.detail.SetPRThreads(m.threads, m.showResolved)
 		m = m.refreshPreview()
 		return m, nil
 	case keyMatches(msg, m.keys.Open):

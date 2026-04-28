@@ -37,6 +37,11 @@ type DetailModel struct {
 	paneWidth int // width of the left pane (set by parent); 0 = unknown
 	paneHeight int
 	myID      string
+	// prThreads is the subset of PR threads that aren't anchored to a
+	// specific file (FilePath==""). Owned and refreshed by the parent
+	// Model; we only read it during renderHeader. Anchored threads are
+	// rendered separately under the file's diff and live on Model.
+	prThreads []ado.Thread
 	// treeMemo caches the result of buildFileTree(m.files). The same
 	// keypress fans out to neighborFile, DisplayNeighbors, and the
 	// renderFilesBlock — without memoization we sort the file slice 3-4
@@ -61,6 +66,25 @@ func NewDetail(keys KeyMap) DetailModel { return DetailModel{keys: keys} }
 // the caller's row with "(you)".
 func (m DetailModel) SetMyID(id string) DetailModel {
 	m.myID = id
+	return m
+}
+
+// SetPRThreads stashes the PR-level threads (those not anchored to a
+// file) so renderHeader can show a Discussion section. Pass the full
+// thread list — the setter filters down to PR-level itself so the
+// caller doesn't have to remember the convention.
+func (m DetailModel) SetPRThreads(all []ado.Thread, includeResolved bool) DetailModel {
+	out := make([]ado.Thread, 0, len(all))
+	for _, t := range all {
+		if t.FilePath != "" {
+			continue
+		}
+		if !includeResolved && t.IsResolved() {
+			continue
+		}
+		out = append(out, t)
+	}
+	m.prThreads = out
 	return m
 }
 
@@ -416,6 +440,9 @@ func (m DetailModel) renderHeader(focused bool) string {
 		}
 	}
 	if block := renderStatusBlock(m.statuses); block != "" {
+		b.WriteString(block)
+	}
+	if block := renderPRDiscussion(m.prThreads); block != "" {
 		b.WriteString(block)
 	}
 	b.WriteString("\n" + m.FilesHeader(focused) + "\n")
