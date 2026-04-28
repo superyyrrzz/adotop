@@ -3,6 +3,7 @@ package gitlocal
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -27,13 +28,18 @@ func diffNormalizationFlags() []string {
 // Diff runs `git -C clonePath diff target..source -- file`. If useDelta is true
 // and `delta` is on PATH, the diff is piped through it for syntax highlighting.
 //
+// ctxLines is the unified-diff context size (`-U<n>`). Pass 3 for the
+// git default. Pass a very large number (e.g. 1<<30) to effectively show
+// the entire file.
+//
 // Diff applies whitespace normalization (CRLF, trailing spaces) by default to
 // match Azure DevOps' web UI; set ADOTOP_DIFF_STRICT=1 to opt out.
-func Diff(ctx context.Context, clonePath, targetSha, sourceSha, file string, useDelta bool) ([]byte, error) {
+func Diff(ctx context.Context, clonePath, targetSha, sourceSha, file string, useDelta bool, ctxLines int) ([]byte, error) {
 	args := []string{"-C", clonePath, "diff", "--no-color"}
 	if useDelta {
 		args = []string{"-C", clonePath, "diff"}
 	}
+	args = append(args, fmt.Sprintf("-U%d", ctxLines))
 	args = append(args, diffNormalizationFlags()...)
 	args = append(args, targetSha+".."+sourceSha, "--", file)
 
@@ -47,7 +53,7 @@ func Diff(ctx context.Context, clonePath, targetSha, sourceSha, file string, use
 		return out, nil
 	}
 	if _, err := exec.LookPath("delta"); err != nil {
-		return Diff(ctx, clonePath, targetSha, sourceSha, file, false)
+		return Diff(ctx, clonePath, targetSha, sourceSha, file, false, ctxLines)
 	}
 
 	pr, pw := io.Pipe()

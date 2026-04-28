@@ -126,6 +126,7 @@ func contextSegments(m Model) []segment {
 		}
 		ctx := fmt.Sprintf("PR #%d · %s", s.ID, focus)
 		segs := []segment{{text: ctx, style: contextStyle()}}
+		segs = append(segs, segment{text: ctxLabel(m.diffCtx), style: hintStyle()})
 		// Surface the cache-revalidation indicator so the user knows the
 		// screen they're looking at is being verified against the server.
 		// The detailInflight counter ticks down as each of the four
@@ -151,7 +152,7 @@ func hintSegments(m Model) []segment {
 		hints = []string{"/:filter", "#:goto", "enter:open", "o:browser", "r:refresh", "tab:next", "?:help", "q:quit"}
 	case screenDetail:
 		base := []string{"tab:focus", "n/N:file", "gg/G:top/end", "enter:expand", "R:show-resolved",
-			"a:approve", "v:vote", "X:abandon", "o:browser", "r:refresh", wrapHint(m), "?:help", "esc:back"}
+			"a:approve", "v:vote", "X:abandon", "o:browser", "r:refresh", wrapHint(m), "+/-:context", "?:help", "esc:back"}
 		hints = base
 	}
 	out := make([]segment, 0, len(hints))

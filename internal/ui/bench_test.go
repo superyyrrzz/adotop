@@ -54,7 +54,7 @@ func BenchmarkJKCycleCacheHit(b *testing.B) {
 		body = append(body, []byte(fmt.Sprintf(" line %d kept context\n", i))...)
 	}
 	for _, f := range files {
-		key := diffSelectionKey("src", "tgt", f.Path)
+		key := diffSelectionKey("src", "tgt", f.Path, 0)
 		m.previewCache.Set(summary.ID, key, body)
 	}
 

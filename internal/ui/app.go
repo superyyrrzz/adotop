@@ -81,6 +81,13 @@ type Model struct {
 	// with long lines (minified JS, generated code, long URLs).
 	wrapDiff bool
 
+	// diffCtx is the unified-diff context size for the preview pane.
+	// 0 = "use the default" (3 lines, matches `git diff` and ADO web).
+	// Positive = explicit line count. -1 = "all" (full file, no folding).
+	// `+`/`-` cycle through ctxLadder. The cache key includes this value
+	// so revisiting a level is instant.
+	diffCtx int
+
 	// detailInflight counts how many of the four detail-screen background
 	// fetches (detail, files, statuses, threads) are currently outstanding.
 	// Bumped by loadDetail, decremented by each *LoadedMsg handler. When >0
@@ -383,18 +390,19 @@ func (m Model) loadDiff(target diffTarget, current DiffModel, requestID int, s a
 		}
 	}
 	dm := m.sizeDiffModel(current.SetHeader(file.Path, renderer), target)
+	ctxN := ctxLines(m.diffCtx)
 	cmd := func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if clonePath != "" {
-			out, err := gitlocal.Diff(ctx, clonePath, targetSha, sourceSha, strings.TrimPrefix(file.Path, "/"), m.useDelta)
+			out, err := gitlocal.Diff(ctx, clonePath, targetSha, sourceSha, strings.TrimPrefix(file.Path, "/"), m.useDelta, ctxN)
 			return diffLoadedMsg{content: out, err: err, target: target, requestID: requestID}
 		}
 		src, tgt, err := m.client.GetFileContents(ctx, s.RepoID, file.Path, sourceSha, targetSha)
 		if err != nil {
 			return diffLoadedMsg{err: err, target: target, requestID: requestID}
 		}
-		return diffLoadedMsg{content: simpleDiff(tgt, src, file.Path), target: target, requestID: requestID}
+		return diffLoadedMsg{content: simpleDiff(tgt, src, file.Path, ctxN), target: target, requestID: requestID}
 	}
 	return dm, cmd
 }
@@ -766,6 +774,8 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.preview.vp.GotoTop()
 		m = m.refreshPreview()
 		return m, nil
+	case keyMatches(msg, m.keys.CtxMore), keyMatches(msg, m.keys.CtxLess):
+		return m.cycleDiffCtx(keyMatches(msg, m.keys.CtxMore))
 	case keyMatches(msg, m.keys.Open):
 		if m.detailFocus == focusDiff {
 			// Toggle expansion of every (visible) thread on the focused file.
@@ -938,6 +948,26 @@ func (m Model) View() string {
 }
 
 
+// cycleDiffCtx advances (or rewinds) the diff context level and reloads
+// the preview at the new level. Each level has its own cache slot, so
+// flipping back to a previously-visited level is instant.
+//
+// We clear previewKey so queuePreviewForSelection treats this as a
+// selection change — that's the existing path that handles cache lookup
+// or fresh fetch + neighbor prefetch.
+func (m Model) cycleDiffCtx(forward bool) (Model, tea.Cmd) {
+	if m.screen != screenDetail || m.detail.Detail() == nil {
+		return m, nil
+	}
+	if forward {
+		m.diffCtx = nextCtx(m.diffCtx)
+	} else {
+		m.diffCtx = prevCtx(m.diffCtx)
+	}
+	m.previewKey = ""
+	return m.queuePreviewForSelection()
+}
+
 func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
 	if m.screen != screenDetail || m.detail.Detail() == nil {
 		return m, nil
@@ -946,7 +976,7 @@ func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	key := diffSelectionKey(m.detail.Detail().SourceSha, m.detail.Detail().TargetSha, f.Path)
+	key := diffSelectionKey(m.detail.Detail().SourceSha, m.detail.Detail().TargetSha, f.Path, m.diffCtx)
 	if key == m.previewKey {
 		return m, nil
 	}
@@ -1018,7 +1048,7 @@ func (m Model) prefetchNeighbors() (Model, tea.Cmd) {
 			continue
 		}
 		f := files[idx]
-		key := diffSelectionKey(d.SourceSha, d.TargetSha, f.Path)
+		key := diffSelectionKey(d.SourceSha, d.TargetSha, f.Path, m.diffCtx)
 		if _, ok := m.previewCache.Get(key); ok {
 			continue
 		}
@@ -1041,11 +1071,12 @@ func (m Model) prefetchOne(file ado.FileChange, key, sourceSha, targetSha string
 	useDelta := m.useDelta
 	repoID := s.RepoID
 	client := m.client
+	ctxN := ctxLines(m.diffCtx)
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if clonePath != "" {
-			out, err := gitlocal.Diff(ctx, clonePath, targetSha, sourceSha, strings.TrimPrefix(file.Path, "/"), useDelta)
+			out, err := gitlocal.Diff(ctx, clonePath, targetSha, sourceSha, strings.TrimPrefix(file.Path, "/"), useDelta, ctxN)
 			return prefetchLoadedMsg{key: key, content: out, err: err}
 		}
 		if client == nil {
@@ -1055,7 +1086,7 @@ func (m Model) prefetchOne(file ado.FileChange, key, sourceSha, targetSha string
 		if err != nil {
 			return prefetchLoadedMsg{key: key, err: err}
 		}
-		return prefetchLoadedMsg{key: key, content: simpleDiff(tgt, src, file.Path)}
+		return prefetchLoadedMsg{key: key, content: simpleDiff(tgt, src, file.Path, ctxN)}
 	}
 }
 
@@ -1151,8 +1182,8 @@ func (m Model) diffViewportSize(target diffTarget) (int, int) {
 	}
 }
 
-func diffSelectionKey(sourceSha, targetSha, path string) string {
-	return sourceSha + "\x00" + targetSha + "\x00" + path
+func diffSelectionKey(sourceSha, targetSha, path string, ctxLevel int) string {
+	return fmt.Sprintf("%s\x00%s\x00%s\x00c%d", sourceSha, targetSha, path, ctxLevel)
 }
 
 func maxInt(a, b int) int {
@@ -1194,15 +1225,18 @@ func friendlyErr(err error) string {
 // normalization as the local-git path so it matches the ADO web UI:
 //   - CRLF → LF
 //   - trailing whitespace stripped
+//
+// ctxLines controls how many surrounding lines each hunk emits; pass 3
+// for the standard view, larger for the user's "expand context" mode.
 // Set ADOTOP_DIFF_STRICT=1 to skip normalization.
-func simpleDiff(target, source []byte, path string) []byte {
+func simpleDiff(target, source []byte, path string, ctxLines int) []byte {
 	t := normalizeForDiff(string(target))
 	s := normalizeForDiff(string(source))
 	tl := strings.Split(t, "\n")
 	sl := strings.Split(s, "\n")
 	var b strings.Builder
 	fmt.Fprintf(&b, "--- a%s\n+++ b%s\n", path, path)
-	hunks := lcsUnifiedHunks(tl, sl, 3)
+	hunks := lcsUnifiedHunks(tl, sl, ctxLines)
 	for _, h := range hunks {
 		b.WriteString(h)
 	}

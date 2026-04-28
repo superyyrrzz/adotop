@@ -20,6 +20,7 @@ type KeyMap struct {
 	JumpToID              key.Binding
 	ShowResolved          key.Binding
 	WrapDiff              key.Binding
+	CtxMore, CtxLess      key.Binding
 }
 
 func DefaultKeys() KeyMap {
@@ -50,5 +51,7 @@ func DefaultKeys() KeyMap {
 		JumpToID:   key.NewBinding(key.WithKeys("#")),
 		ShowResolved: key.NewBinding(key.WithKeys("R")),
 		WrapDiff:     key.NewBinding(key.WithKeys("w")),
+		CtxMore:      key.NewBinding(key.WithKeys("+", "=")),
+		CtxLess:      key.NewBinding(key.WithKeys("-", "_")),
 	}
 }

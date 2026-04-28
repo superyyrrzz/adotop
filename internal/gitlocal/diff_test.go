@@ -30,7 +30,7 @@ func TestDiffProducesUnifiedDiff(t *testing.T) {
 	mustRun(t, dir, "git", "commit", "-m", "change")
 	src := commitSha(t, dir)
 
-	out, err := Diff(context.Background(), dir, tgt, src, "f.txt", false)
+	out, err := Diff(context.Background(), dir, tgt, src, "f.txt", false, 3)
 	if err != nil {
 		t.Fatalf("Diff: %v", err)
 	}
