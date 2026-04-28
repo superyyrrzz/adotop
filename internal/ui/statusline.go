@@ -120,7 +120,7 @@ func contextSegments(m Model) []segment {
 		ctx := fmt.Sprintf("%s/%s · %s",
 			orPlaceholder(m.cfg.Org, "(no org)"),
 			orPlaceholder(m.cfg.Project, "(no project)"),
-			m.list.Tab().String())
+			m.list.Tab().Short())
 		return []segment{{text: ctx, style: contextStyle()}}
 	case screenDetail:
 		s := m.detail.Summary()

@@ -3,6 +3,10 @@ package ui
 import (
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/renzeyu/adotop/internal/config"
 )
 
 // TestStatuslineModeReflectsState: each modal flag on the model should
@@ -64,5 +68,28 @@ func TestStatuslineMenuModeReplacesContext(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("vote menu statusline missing %q: %q", want, out)
 		}
+	}
+}
+
+// TestStatuslineUsesShortTabLabel guards the regression where the
+// list-screen context segment showed "All reviewing" — long enough to
+// crowd hints off the right side at typical widths. The statusline,
+// like the topbar breadcrumb, must use Tab.Short().
+func TestStatuslineUsesShortTabLabel(t *testing.T) {
+	m := newTestModel()
+	m.cfg = config.Config{Org: "ceapex", Project: "Engineering"}
+	m.width = 200
+
+	for i := 0; i < 3; i++ {
+		mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		m = mm.(Model)
+	}
+
+	out := renderStatusline(m)
+	if strings.Contains(out, "All reviewing") {
+		t.Fatalf("statusline should NOT use long tab label:\n%s", out)
+	}
+	if !strings.Contains(out, "Reviewing") {
+		t.Fatalf("statusline should use short tab label:\n%s", out)
 	}
 }
