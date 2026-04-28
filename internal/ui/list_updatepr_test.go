@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 // TestUpdatePRPatchesAllTabs is the regression guard for the "list view

@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 // TestDetailLoadedSyncsListAndRecents is the end-to-end regression

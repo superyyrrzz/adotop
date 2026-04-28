@@ -7,8 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/renzeyu/adotop/internal/ado"
-	"github.com/renzeyu/adotop/internal/config"
+	"github.com/superyyrrzz/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/config"
 )
 
 // TestAppViewKeepsTopbarVisibleForTallList is the regression guard for

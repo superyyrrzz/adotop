@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 func newTestStore(t *testing.T) *Store {

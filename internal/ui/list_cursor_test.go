@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 // TestCursorRowIsBracketed is the regression guard for the cursor

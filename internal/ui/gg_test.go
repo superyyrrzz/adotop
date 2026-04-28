@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 // TestDetailGGJumpsCursorToFirstFile covers the vim-style `gg` two-key

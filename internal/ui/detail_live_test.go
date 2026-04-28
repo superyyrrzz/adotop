@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 // TestLivePR1145087HeaderVisible fetches a real PR and verifies that the

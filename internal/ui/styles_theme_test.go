@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/renzeyu/adotop/internal/ui/theme"
+	"github.com/superyyrrzz/adotop/internal/ui/theme"
 )
 
 func TestNewStylesPopulatesAllRoles(t *testing.T) {

@@ -257,7 +257,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/renzeyu/adotop/internal/ui/theme"
+	"github.com/superyyrrzz/adotop/internal/ui/theme"
 )
 
 func TestNewStylesPopulatesAllRoles(t *testing.T) {
@@ -300,7 +300,7 @@ package ui
 import (
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/renzeyu/adotop/internal/ui/theme"
+	"github.com/superyyrrzz/adotop/internal/ui/theme"
 )
 
 // Styles is the full set of lipgloss.Style values derived from a Theme.
@@ -383,7 +383,7 @@ In `internal/ui/app.go`, add to the `Model` struct (near other config-ish fields
 	styles Styles
 ```
 
-Add the import: `"github.com/renzeyu/adotop/internal/ui/theme"`.
+Add the import: `"github.com/superyyrrzz/adotop/internal/ui/theme"`.
 
 In the `New()` constructor (top of the function), before any sub-model construction:
 
@@ -470,7 +470,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/renzeyu/adotop/internal/ui/theme"
+	"github.com/superyyrrzz/adotop/internal/ui/theme"
 )
 
 func TestApplyDiffThemeChangesAddBg(t *testing.T) {
@@ -540,7 +540,7 @@ func openSequence(s string) string {
 }
 ```
 
-Add imports at top of file: `"github.com/charmbracelet/lipgloss"` and `"github.com/renzeyu/adotop/internal/ui/theme"`.
+Add imports at top of file: `"github.com/charmbracelet/lipgloss"` and `"github.com/superyyrrzz/adotop/internal/ui/theme"`.
 
 - [ ] **Step 4: Call applyDiffTheme in New()**
 

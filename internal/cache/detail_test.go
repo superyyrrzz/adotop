@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 func TestDetailRoundTrip(t *testing.T) {

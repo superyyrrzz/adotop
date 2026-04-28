@@ -3,7 +3,7 @@ package ui
 import (
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/renzeyu/adotop/internal/ui/theme"
+	"github.com/superyyrrzz/adotop/internal/ui/theme"
 )
 
 // Styles is the full set of lipgloss.Style values derived from a Theme.

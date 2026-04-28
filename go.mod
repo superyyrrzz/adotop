@@ -1,4 +1,4 @@
-module github.com/renzeyu/adotop
+module github.com/superyyrrzz/adotop
 
 go 1.26.2
 

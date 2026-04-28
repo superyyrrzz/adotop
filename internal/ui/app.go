@@ -13,11 +13,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/renzeyu/adotop/internal/ado"
-	"github.com/renzeyu/adotop/internal/cache"
-	"github.com/renzeyu/adotop/internal/config"
-	"github.com/renzeyu/adotop/internal/gitlocal"
-	"github.com/renzeyu/adotop/internal/ui/theme"
+	"github.com/superyyrrzz/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/cache"
+	"github.com/superyyrrzz/adotop/internal/config"
+	"github.com/superyyrrzz/adotop/internal/gitlocal"
+	"github.com/superyyrrzz/adotop/internal/ui/theme"
 )
 
 type screen int

@@ -1370,7 +1370,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 func samplePRs() []ado.PRSummary {
@@ -1442,7 +1442,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 type prsLoadedMsg struct {
@@ -1701,7 +1701,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 func TestDetailRendersDescriptionAndFiles(t *testing.T) {
@@ -1750,7 +1750,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 type detailLoadedMsg struct {
@@ -2080,9 +2080,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/renzeyu/adotop/internal/ado"
-	"github.com/renzeyu/adotop/internal/config"
-	"github.com/renzeyu/adotop/internal/gitlocal"
+	"github.com/superyyrrzz/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/config"
+	"github.com/superyyrrzz/adotop/internal/gitlocal"
 )
 
 type screen int

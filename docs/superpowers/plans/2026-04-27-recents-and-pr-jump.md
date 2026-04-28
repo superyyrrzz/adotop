@@ -441,7 +441,7 @@ func TestOpeningPRRecordsRecentVisit(t *testing.T) {
 }
 ```
 
-You'll need `"github.com/renzeyu/adotop/internal/cache"` imported in `app_test.go`.
+You'll need `"github.com/superyyrrzz/adotop/internal/cache"` imported in `app_test.go`.
 
 - [ ] **Step 2: Run to verify it fails**
 

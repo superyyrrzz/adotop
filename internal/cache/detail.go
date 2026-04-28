@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 // detailCacheCap bounds how many per-PR detail snapshots we keep on

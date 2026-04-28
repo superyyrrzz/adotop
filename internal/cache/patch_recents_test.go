@@ -3,7 +3,7 @@ package cache
 import (
 	"testing"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 // TestPatchRecentsRewritesMatchingEntry is the persistence half of the

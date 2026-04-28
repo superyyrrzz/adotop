@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/renzeyu/adotop/internal/ado"
-	"github.com/renzeyu/adotop/internal/applog"
-	"github.com/renzeyu/adotop/internal/config"
-	"github.com/renzeyu/adotop/internal/ui"
+	"github.com/superyyrrzz/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/applog"
+	"github.com/superyyrrzz/adotop/internal/config"
+	"github.com/superyyrrzz/adotop/internal/ui"
 )
 
 func main() {

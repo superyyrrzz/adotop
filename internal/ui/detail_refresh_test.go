@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 // TestDetailLoadedRefreshesReviewerVotes is the regression guard for

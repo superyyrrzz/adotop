@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/renzeyu/adotop/internal/ado"
-	"github.com/renzeyu/adotop/internal/gitlocal"
+	"github.com/superyyrrzz/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/gitlocal"
 )
 
 // BenchmarkJKCycleCacheHit measures the cost of a single n/N keystroke

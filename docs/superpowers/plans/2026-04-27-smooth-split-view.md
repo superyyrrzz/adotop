@@ -40,8 +40,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/renzeyu/adotop/internal/ado"
-	"github.com/renzeyu/adotop/internal/config"
+	"github.com/superyyrrzz/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/config"
 )
 
 func newDetailModel(t *testing.T) Model {

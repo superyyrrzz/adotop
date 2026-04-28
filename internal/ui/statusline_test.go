@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/renzeyu/adotop/internal/config"
+	"github.com/superyyrrzz/adotop/internal/config"
 )
 
 // TestStatuslineModeReflectsState: each modal flag on the model should

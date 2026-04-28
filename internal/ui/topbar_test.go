@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/renzeyu/adotop/internal/config"
+	"github.com/superyyrrzz/adotop/internal/config"
 )
 
 // TestTopbarShowsCrumbsForListScreen is the contract test for the

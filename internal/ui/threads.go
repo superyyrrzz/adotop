@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 // threadsForFile returns threads attached to the given file path, applying

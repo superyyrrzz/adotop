@@ -6,9 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/renzeyu/adotop/internal/ado"
-	"github.com/renzeyu/adotop/internal/cache"
-	"github.com/renzeyu/adotop/internal/gitlocal"
+	"github.com/superyyrrzz/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/cache"
+	"github.com/superyyrrzz/adotop/internal/gitlocal"
 )
 
 func TestDetailScreenAutoPreviewsFirstFile(t *testing.T) {

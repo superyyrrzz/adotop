@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/renzeyu/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
 // nowFn is a seam for tests; production code uses time.Now.
