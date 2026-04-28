@@ -47,12 +47,28 @@ type Styles struct {
 // NewStyles builds the style set for a given theme. Add new roles here
 // when the UI grows new visual concepts; do NOT scatter
 // lipgloss.NewStyle() calls in render code.
+//
+// Color discipline (single-accent rule):
+//
+// The theme's Mauve is reserved for the "you are here / this is
+// selected" vocabulary, and ONLY for that. Five legitimate uses today:
+//
+//  1. Active breadcrumb crumb in the topbar (renderTopbar)
+//  2. Active tab pill in the tab strip (TabOn)
+//  3. List cursor bar `▌` in the PR list (Cursor)
+//  4. Focused pane border in the detail screen (focusedPaneBorder)
+//  5. PillDone for the MERGED PR-state chip and the vote-menu mode pill
+//
+// New mauve usage anywhere else dilutes the signal. Prefer Header
+// (bold blue) for labels/identifiers, Faint (Subtext) for secondary
+// text, and the semantic pill styles (PillGood / PillBad / PillWarn /
+// PillInfo) for state.
 func NewStyles(t theme.Theme) Styles {
 	return Styles{
 		Header:   lipgloss.NewStyle().Bold(true).Foreground(t.Blue),
 		Faint:    lipgloss.NewStyle().Foreground(t.Subtext),
 		ErrLine:  lipgloss.NewStyle().Foreground(t.Red),
-		TabOn:    pillStyle(t.Mauve, lipgloss.Color("0")),
+		TabOn:    pillStyle(t.Mauve, t.PillFgOnSaturated),
 		TabOff:   lipgloss.NewStyle().Foreground(t.Subtext),
 		Selected: lipgloss.NewStyle().Reverse(true),
 		Cursor:   lipgloss.NewStyle().Foreground(t.Mauve).Bold(true),
