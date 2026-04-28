@@ -79,4 +79,16 @@ func TestRefreshPreviewWithWrapWritesWrappedContent(t *testing.T) {
 	if !strings.Contains(wrappedView, "…") {
 		t.Fatalf("wrapped viewport missing continuation marker:\n%s", wrappedView)
 	}
+
+	// Now flip wrap OFF — the viewport must lose the continuation
+	// markers and return to the unwrapped form. This is the regression
+	// case for the bug where the toggle was one-way: refreshPreview
+	// early-returned when wrapDiff went back to false, leaving the
+	// already-wrapped content stuck on screen.
+	m.wrapDiff = false
+	m = m.refreshPreview()
+	unwrappedView := m.preview.vp.View()
+	if strings.Contains(unwrappedView, "…") {
+		t.Fatalf("refreshPreview did not undo wrap when toggled off:\n%s", unwrappedView)
+	}
 }

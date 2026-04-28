@@ -65,20 +65,17 @@ func (m Model) refreshPreview() Model {
 	}
 	commentsBlock := m.previewCommentsBlock()
 	composed := composeDiffWithComments(nil, commentsBlock)
-	if composed == "" && m.preview.loaded && !m.wrapDiff {
-		// Diff already in viewport; nothing to fold in and no wrap to
-		// apply. Skip SetContent so we don't pay for a viewport rebuild
-		// on every j/k.
-		//
-		// When wrapDiff is on we always rebuild because the cached
-		// `rendered` string is the unwrapped form — the toggle has to
-		// re-pass it through wrapDiffLines at the current pane width.
-		return m
-	}
 	body := rendered
 	if m.wrapDiff {
 		body = wrapDiffLines(body, m.preview.vp.Width)
 	}
+	// Always rewrite the viewport. Earlier code skipped SetContent when
+	// there were no comments to fold in and the diff was already loaded —
+	// but that branch made the wrap toggle one-way: turning wrap OFF
+	// would early-return with the still-wrapped content in place.
+	// refreshPreview is only ever called from explicit user actions
+	// (toggle, expand, refresh) or message arrivals (diffLoadedMsg,
+	// threadsLoadedMsg) — never from j/k — so the rebuild cost is fine.
 	m.preview.vp.SetContent(body + composed)
 	return m
 }
