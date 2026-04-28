@@ -628,15 +628,22 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case keyMatches(msg, m.keys.NextFile):
-		if m.detail.cursor < len(m.detail.files)-1 {
-			m.detail.cursor++
+		// Walk in display (tree) order so n/N matches j/k. Without
+		// neighborFile this would step through API order, which can
+		// jump across the file tree in non-obvious directions.
+		next := m.detail.neighborFile(+1)
+		if next == m.detail.cursor {
+			return m, nil
 		}
+		m.detail.cursor = next
 		mm, previewCmd := m.queuePreviewForSelection()
 		return mm, previewCmd
 	case keyMatches(msg, m.keys.PrevFile):
-		if m.detail.cursor > 0 {
-			m.detail.cursor--
+		prev := m.detail.neighborFile(-1)
+		if prev == m.detail.cursor {
+			return m, nil
 		}
+		m.detail.cursor = prev
 		mm, previewCmd := m.queuePreviewForSelection()
 		return mm, previewCmd
 	}
