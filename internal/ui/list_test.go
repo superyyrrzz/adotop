@@ -131,7 +131,11 @@ func TestListAllColumnsAlignAcrossVaryingInputs(t *testing.T) {
 	out := m.View()
 	rows := []string{}
 	for _, line := range strings.Split(out, "\n") {
+		// Cursor row starts with the "▌ " gutter; non-cursor rows start
+		// with a 2-space gutter. Strip both before checking for "#".
 		trim := strings.TrimLeft(line, " ")
+		trim = strings.TrimPrefix(trim, "▌")
+		trim = strings.TrimLeft(trim, " ")
 		if strings.HasPrefix(trim, "#") {
 			rows = append(rows, line)
 		}

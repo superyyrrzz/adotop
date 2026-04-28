@@ -65,12 +65,21 @@ func (m Model) refreshPreview() Model {
 	}
 	commentsBlock := m.previewCommentsBlock()
 	composed := composeDiffWithComments(nil, commentsBlock)
-	if composed == "" && m.preview.loaded {
-		// Diff already in viewport; nothing to fold in. Skip SetContent
-		// so we don't pay for a viewport rebuild on every j/k.
+	if composed == "" && m.preview.loaded && !m.wrapDiff {
+		// Diff already in viewport; nothing to fold in and no wrap to
+		// apply. Skip SetContent so we don't pay for a viewport rebuild
+		// on every j/k.
+		//
+		// When wrapDiff is on we always rebuild because the cached
+		// `rendered` string is the unwrapped form — the toggle has to
+		// re-pass it through wrapDiffLines at the current pane width.
 		return m
 	}
-	m.preview.vp.SetContent(rendered + composed)
+	body := rendered
+	if m.wrapDiff {
+		body = wrapDiffLines(body, m.preview.vp.Width)
+	}
+	m.preview.vp.SetContent(body + composed)
 	return m
 }
 

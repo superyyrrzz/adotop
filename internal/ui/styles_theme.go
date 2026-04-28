@@ -17,6 +17,10 @@ type Styles struct {
 	TabOn    lipgloss.Style
 	TabOff   lipgloss.Style
 	Selected lipgloss.Style
+	// Cursor is rendered on the leftmost column of the highlighted row
+	// in the PR list (and any future list). Foreground-only so it doesn't
+	// fight with chip backgrounds the way Selected.Reverse did.
+	Cursor   lipgloss.Style
 	HelpBox  lipgloss.Style
 	Approve  lipgloss.Style
 	Reject   lipgloss.Style
@@ -51,6 +55,7 @@ func NewStyles(t theme.Theme) Styles {
 		TabOn:    lipgloss.NewStyle().Bold(true).Underline(true).Foreground(t.Mauve),
 		TabOff:   lipgloss.NewStyle().Foreground(t.Subtext),
 		Selected: lipgloss.NewStyle().Reverse(true),
+		Cursor:   lipgloss.NewStyle().Foreground(t.Mauve).Bold(true),
 		HelpBox: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(t.Overlay).

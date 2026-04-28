@@ -96,8 +96,11 @@ func (c *Client) GetPullRequestThreads(ctx context.Context, repoID string, prID 
 			t.LeftLine = r.ThreadContext.LeftFileStart.Line
 		}
 		for _, rc := range r.Comments {
-			// Skip system codeChange notes — they're noise for human review.
-			if rc.CommentType == "system" {
+			// Drop only auto "codeChange" notes (e.g. "force-pushed an
+			// update") — those are truly noise. Keep "system" comments:
+			// they carry real signal from bots/pipelines like GitOps,
+			// Ownership Enforcer, AI reviewers, etc.
+			if rc.CommentType == "codeChange" {
 				continue
 			}
 			pub, _ := time.Parse(time.RFC3339, rc.PublishedDate)

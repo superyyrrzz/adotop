@@ -75,6 +75,18 @@ type Model struct {
 	threads        []ado.Thread
 	showResolved   bool
 	expandedThread map[int]bool
+	// wrapDiff toggles soft-wrap on the diff preview viewport. Off by
+	// default — most lines fit and visual line counts matter for
+	// scanning large diffs. Press `w` to enable when reading a file
+	// with long lines (minified JS, generated code, long URLs).
+	wrapDiff bool
+
+	// detailInflight counts how many of the four detail-screen background
+	// fetches (detail, files, statuses, threads) are currently outstanding.
+	// Bumped by loadDetail, decremented by each *LoadedMsg handler. When >0
+	// the statusline shows a small ↻ glyph so the user knows the cached
+	// snapshot they're looking at is being verified against the server.
+	detailInflight int
 }
 
 // pendingAction is a destructive operation awaiting y/n confirmation.
@@ -154,8 +166,9 @@ type actionDoneMsg struct {
 
 // threadsLoadedMsg is the response from GetPullRequestThreads.
 type threadsLoadedMsg struct {
-	threads []ado.Thread
-	err     error
+	threads   []ado.Thread
+	err       error
+	fromCache bool
 }
 
 func tick(d time.Duration) tea.Cmd {
@@ -198,8 +211,46 @@ func (m Model) loadList(tab ado.Tab) tea.Cmd {
 	}
 }
 
-func (m Model) loadDetail(s ado.PRSummary) tea.Cmd {
-	return tea.Batch(
+// loadDetail fans out the four detail-screen fetches (PR, files,
+// statuses, threads) and — when a cached snapshot exists for this PR —
+// also dispatches synthetic *LoadedMsg events with the cached payload
+// so the screen paints instantly. The fresh fetches still run in
+// parallel and overwrite cached values via the existing Update path
+// when they return.
+//
+// detailInflight tracks how many fetches are outstanding so the
+// statusline can show a refresh indicator while the cached view is
+// being verified against the server.
+func (m Model) loadDetail(s ado.PRSummary) (Model, tea.Cmd) {
+	m.detailInflight = 4
+
+	cmds := make([]tea.Cmd, 0, 8)
+	if m.cache != nil {
+		if snap, ok := m.cache.LoadDetail(s.ID); ok {
+			// Each cached field comes back as the same *LoadedMsg the
+			// network path uses. Empty-field omission keeps the existing
+			// "loading" placeholders if a previous session never managed
+			// to fetch that endpoint.
+			if snap.Detail != nil {
+				d := snap.Detail
+				cmds = append(cmds, func() tea.Msg { return detailLoadedMsg{detail: d, fromCache: true} })
+			}
+			if snap.Files != nil {
+				files := snap.Files
+				cmds = append(cmds, func() tea.Msg { return filesLoadedMsg{files: files, fromCache: true} })
+			}
+			if snap.Statuses != nil {
+				st := snap.Statuses
+				cmds = append(cmds, func() tea.Msg { return statusesLoadedMsg{statuses: st, fromCache: true} })
+			}
+			if snap.Threads != nil {
+				th := snap.Threads
+				cmds = append(cmds, func() tea.Msg { return threadsLoadedMsg{threads: th, fromCache: true} })
+			}
+		}
+	}
+
+	cmds = append(cmds,
 		func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -225,6 +276,56 @@ func (m Model) loadDetail(s ado.PRSummary) tea.Cmd {
 			return threadsLoadedMsg{threads: threads, err: err}
 		},
 	)
+	return m, tea.Batch(cmds...)
+}
+
+// markDetailFetchDone decrements the in-flight counter that powers the
+// statusline refresh indicator. Bottoms out at 0 so an extra arrival
+// (cached + fresh both for the same field) doesn't underflow. We rely
+// on counter==0 as the "all four fetches accounted for" signal.
+func (m Model) markDetailFetchDone() Model {
+	if m.detailInflight > 0 {
+		m.detailInflight--
+	}
+	return m
+}
+
+// persistDetailField writes the current detail snapshot to the
+// per-PR cache file, applying mutate to whatever is on disk first
+// (read-modify-write so a parallel fetch's prior write isn't lost).
+// Best-effort: cache failures are logged but don't surface to the user.
+func (m Model) persistDetailField(mutate func(snap *cache.DetailSnapshot)) {
+	if m.cache == nil {
+		return
+	}
+	prID := m.detail.Summary().ID
+	if prID == 0 {
+		return
+	}
+	snap, _ := m.cache.LoadDetail(prID)
+	if snap == nil {
+		snap = &cache.DetailSnapshot{PRID: prID}
+	}
+	snap.PRID = prID
+	mutate(snap)
+	if err := m.cache.SaveDetail(*snap); err != nil {
+		slog.Warn("cache: save detail", "pr", prID, "err", err)
+	}
+}
+
+// maybeDropTerminalCache removes the cached snapshot when the PR has
+// transitioned to a terminal state (completed/abandoned). Those PRs
+// don't change again, so the disk slot is better spent on active ones.
+func (m Model) maybeDropTerminalCache(d *ado.PRDetail) {
+	if m.cache == nil || d == nil {
+		return
+	}
+	switch strings.ToLower(d.Status) {
+	case "completed", "abandoned":
+		if err := m.cache.DropDetail(d.ID); err != nil {
+			slog.Warn("cache: drop terminal", "pr", d.ID, "err", err)
+		}
+	}
 }
 
 // approveCurrent issues a vote=10 against the current PR. Safe to call
@@ -322,11 +423,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.loadList(m.list.Tab())
 	case tickMsg:
-		var cmd tea.Cmd
-		if m.screen == screenList {
-			cmd = m.loadList(m.list.Tab())
+		// Refresh all three server-backed tabs regardless of screen so
+		// when the user returns from detail view the list is current.
+		// Recents is a local-only synthesized view (no server endpoint),
+		// so it's skipped — UpdatePR keeps it fresh from detail loads
+		// and PatchRecents persists it across restarts.
+		var cmds []tea.Cmd
+		for _, tab := range []ado.Tab{ado.TabAssigned, ado.TabCreated, ado.TabReviewRequested} {
+			if c := m.loadList(tab); c != nil {
+				cmds = append(cmds, c)
+			}
 		}
-		return m, tea.Batch(cmd, tick(m.cfg.RefreshInterval.Duration))
+		cmds = append(cmds, tick(m.cfg.RefreshInterval.Duration))
+		return m, tea.Batch(cmds...)
 	case tabSwitchedMsg:
 		return m, m.loadList(msg.Tab)
 	case prsLoadedMsg:
@@ -339,20 +448,52 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list, cmd = m.list.Update(msg)
 		return m, cmd
 	case detailLoadedMsg:
+		if !msg.fromCache {
+			m = m.markDetailFetchDone()
+			if msg.err == nil {
+				m.persistDetailField(func(snap *cache.DetailSnapshot) { snap.Detail = msg.detail })
+				m.maybeDropTerminalCache(msg.detail)
+				// Propagate fresh PR state to the list and recents cache so
+				// the row the user came from updates without a list refetch.
+				if msg.detail != nil {
+					m.list = m.list.UpdatePR(msg.detail.PRSummary)
+					if m.cache != nil {
+						if err := m.cache.PatchRecents(msg.detail.PRSummary); err != nil {
+							slog.Warn("cache: patch recents", "pr", msg.detail.ID, "err", err)
+						}
+					}
+				}
+			}
+		}
 		var cmd tea.Cmd
 		m.detail, cmd = m.detail.Update(msg)
 		m, previewCmd := m.queuePreviewForSelection()
 		return m, tea.Batch(cmd, previewCmd)
 	case filesLoadedMsg:
+		if !msg.fromCache {
+			m = m.markDetailFetchDone()
+			if msg.err == nil {
+				m.persistDetailField(func(snap *cache.DetailSnapshot) { snap.Files = msg.files })
+			}
+		}
 		var cmd tea.Cmd
 		m.detail, cmd = m.detail.Update(msg)
 		m, previewCmd := m.queuePreviewForSelection()
 		return m, tea.Batch(cmd, previewCmd)
 	case statusesLoadedMsg:
+		if !msg.fromCache {
+			m = m.markDetailFetchDone()
+			if msg.err == nil {
+				m.persistDetailField(func(snap *cache.DetailSnapshot) { snap.Statuses = msg.statuses })
+			}
+		}
 		var cmd tea.Cmd
 		m.detail, cmd = m.detail.Update(msg)
 		return m, cmd
 	case threadsLoadedMsg:
+		if !msg.fromCache {
+			m = m.markDetailFetchDone()
+		}
 		if msg.err != nil {
 			slog.Warn("threads: fetch failed", "err", msg.err)
 			return m, nil
@@ -360,6 +501,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.threads = msg.threads
 		m.detail = m.detail.SetPRThreads(m.threads, m.showResolved)
 		m = m.refreshPreview()
+		if !msg.fromCache {
+			m.persistDetailField(func(snap *cache.DetailSnapshot) { snap.Threads = msg.threads })
+		}
 		return m, nil
 	case diffLoadedMsg:
 		if msg.target != diffTargetPreview {
@@ -421,7 +565,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// list cache for the active tab so the row reflects the change.
 		var cmds []tea.Cmd
 		if m.screen == screenDetail && m.detail.Summary().ID == msg.prID {
-			cmds = append(cmds, m.loadDetail(m.detail.Summary()))
+			var dCmd tea.Cmd
+			m, dCmd = m.loadDetail(m.detail.Summary())
+			cmds = append(cmds, dCmd)
 		}
 		cmds = append(cmds, m.loadList(m.list.Tab()))
 		return m, tea.Batch(cmds...)
@@ -494,7 +640,7 @@ func (m Model) openDetail(s ado.PRSummary) (Model, tea.Cmd) {
 			m.list, _ = m.list.Update(prsLoadedMsg{tab: ado.TabRecents, prs: recents})
 		}
 	}
-	return m, m.loadDetail(s)
+	return m.loadDetail(s)
 }
 
 func (m Model) updateListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -589,7 +735,7 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.previewKey = ""
 		m.scrollMem = map[string]int{}
 		m.previewCache.ClearPR(m.detail.Summary().ID)
-		return m, m.loadDetail(m.detail.Summary())
+		return m.loadDetail(m.detail.Summary())
 	case keyMatches(msg, m.keys.Browser):
 		u := m.detail.Summary().URL
 		if u == "" {
@@ -607,6 +753,17 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyMatches(msg, m.keys.ShowResolved):
 		m.showResolved = !m.showResolved
 		m.detail = m.detail.SetPRThreads(m.threads, m.showResolved)
+		m = m.refreshPreview()
+		return m, nil
+	case keyMatches(msg, m.keys.WrapDiff):
+		// Soft-wrap toggle for the diff preview. Off by default so
+		// large diffs stay scannable; on for files with long lines.
+		// refreshPreview re-feeds the viewport from the cached
+		// unwrapped render, applying wrapDiffLines when wrapDiff=on.
+		m.wrapDiff = !m.wrapDiff
+		// Reset scroll so the user lands at the top of the wrapped
+		// view — the visual line numbering changed under them.
+		m.preview.vp.GotoTop()
 		m = m.refreshPreview()
 		return m, nil
 	case keyMatches(msg, m.keys.Open):

@@ -125,7 +125,15 @@ func contextSegments(m Model) []segment {
 			focus = "Diff"
 		}
 		ctx := fmt.Sprintf("PR #%d · %s", s.ID, focus)
-		return []segment{{text: ctx, style: contextStyle()}}
+		segs := []segment{{text: ctx, style: contextStyle()}}
+		// Surface the cache-revalidation indicator so the user knows the
+		// screen they're looking at is being verified against the server.
+		// The detailInflight counter ticks down as each of the four
+		// fetches lands; we only show the chip while >0.
+		if m.detailInflight > 0 {
+			segs = append(segs, segment{text: "↻ refreshing", style: hintStyle()})
+		}
+		return segs
 	}
 	return nil
 }
@@ -143,7 +151,7 @@ func hintSegments(m Model) []segment {
 		hints = []string{"/:filter", "#:goto", "enter:open", "o:browser", "r:refresh", "tab:next", "?:help", "q:quit"}
 	case screenDetail:
 		base := []string{"tab:focus", "n/N:file", "gg/G:top/end", "enter:expand", "R:show-resolved",
-			"a:approve", "v:vote", "X:abandon", "o:browser", "r:refresh", "?:help", "esc:back"}
+			"a:approve", "v:vote", "X:abandon", "o:browser", "r:refresh", wrapHint(m), "?:help", "esc:back"}
 		hints = base
 	}
 	out := make([]segment, 0, len(hints))
@@ -233,6 +241,16 @@ func joinSegments(segs []segment) string {
 // reads as secondary to the mode segment without being invisible.
 func contextStyle() lipgloss.Style {
 	return PillNeutral
+}
+
+// wrapHint returns the diff-wrap toggle label, with a state suffix so
+// the user can tell the current mode at a glance. We keep it short to
+// stay under typical pane widths.
+func wrapHint(m Model) string {
+	if m.wrapDiff {
+		return "w:wrap·on"
+	}
+	return "w:wrap·off"
 }
 
 // hintStyle is intentionally bg-less and faint so hints look like

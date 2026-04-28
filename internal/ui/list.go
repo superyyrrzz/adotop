@@ -114,6 +114,27 @@ func keyMatches(msg tea.KeyMsg, b interface{ Keys() []string }) bool {
 	return false
 }
 
+// UpdatePR finds rows matching s.ID across every tab and replaces them
+// with s. Used when fresh data arrives via the detail view (votes,
+// status, etc.) — without this the list keeps showing the row as it
+// looked the moment the user opened the PR.
+//
+// No-op when s.ID is 0 (defensive) or no row matches in any tab.
+func (m ListModel) UpdatePR(s ado.PRSummary) ListModel {
+	if s.ID == 0 {
+		return m
+	}
+	for tab, rows := range m.prs {
+		for i := range rows {
+			if rows[i].ID == s.ID {
+				rows[i] = s
+			}
+		}
+		m.prs[tab] = rows
+	}
+	return m
+}
+
 func (m ListModel) Update(msg tea.Msg) (ListModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -212,23 +233,60 @@ func (m ListModel) updateFiltering(msg tea.KeyMsg) (ListModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m ListModel) View() string {
-	var b strings.Builder
-	tabs := []string{
-		ado.TabRecents.String(),
-		ado.TabAssigned.String(),
-		ado.TabCreated.String(),
-		ado.TabReviewRequested.String(),
+// renderTabs draws the four-tab top bar with three label widths chosen
+// by m.width so the strip never wraps and pushes the table off-screen.
+//
+// Tier A (full): " Recents (12) "        — fits when width >= long sum
+// Tier B (short): " Recent (12) "        — drops to short labels + count
+// Tier C (no count): " Recent "          — narrowest viable form
+//
+// We always render the active-tab style for the selected tab so the
+// user can still tell which tab they're on at any width. The fallback
+// chain protects the row below the tabs (header + table) from being
+// pushed under the fold.
+func (m ListModel) renderTabs() string {
+	full := []string{"Recents", "Assigned to me", "Created by me", "All reviewing"}
+	short := []string{"Recents", "Assigned", "Created", "Reviewing"}
+	w := m.width
+	build := func(labels []string, withCount bool) string {
+		var b strings.Builder
+		for i, name := range labels {
+			label := " " + name
+			if withCount {
+				label += fmt.Sprintf(" (%d)", len(m.prs[ado.Tab(i)]))
+			}
+			label += " "
+			if ado.Tab(i) == m.tab {
+				b.WriteString(TabOn.Render(label))
+			} else {
+				b.WriteString(TabOff.Render(label))
+			}
+		}
+		return b.String()
 	}
-	for i, name := range tabs {
-		count := len(m.prs[ado.Tab(i)])
-		label := fmt.Sprintf(" %s (%d) ", name, count)
-		if ado.Tab(i) == m.tab {
-			b.WriteString(TabOn.Render(label))
-		} else {
-			b.WriteString(TabOff.Render(label))
+	candidates := []struct {
+		labels    []string
+		withCount bool
+	}{
+		{full, true},
+		{short, true},
+		{short, false},
+	}
+	if w <= 0 {
+		return build(full, true)
+	}
+	for _, c := range candidates {
+		out := build(c.labels, c.withCount)
+		if lipgloss.Width(out) <= w {
+			return out
 		}
 	}
+	return build(short, false)
+}
+
+func (m ListModel) View() string {
+	var b strings.Builder
+	b.WriteString(m.renderTabs())
 	b.WriteString("\n\n")
 
 	rows := m.visible()
@@ -239,7 +297,8 @@ func (m ListModel) View() string {
 	} else if len(rows) == 0 {
 		b.WriteString(Faint.Render("No PRs in this tab.\n"))
 	} else {
-		header := fmt.Sprintf("%s %s %s %s %s   %s   %s",
+		header := fmt.Sprintf("%s%s %s %s %s %s   %s   %s",
+			cursorGutter,
 			padCols("ID", cols.id),
 			padCols("State", stateColWidth),
 			padCols("Title", cols.title),
@@ -264,7 +323,17 @@ func (m ListModel) View() string {
 			if pad > 0 {
 				pill += strings.Repeat(" ", pad)
 			}
-			line := fmt.Sprintf("%s %s %s %s %s → %s   %s",
+			// Cursor marker: the leftmost column carries a colored bar
+			// for the highlighted row, a plain space for everything else.
+			// This replaced an old Selected.Reverse(true) that inverted
+			// the entire 2-line block, which fought visually with the
+			// vote chips and pill backgrounds.
+			gutter := cursorGutter
+			if i == m.cursor {
+				gutter = Cursor.Render("▌") + " "
+			}
+			line := fmt.Sprintf("%s%s %s %s %s %s → %s   %s",
+				gutter,
 				padCols(fmt.Sprintf("#%d", p.ID), cols.id),
 				pill,
 				truncCols(p.Title, cols.title),
@@ -279,10 +348,10 @@ func (m ListModel) View() string {
 			} else {
 				meta = "    " + voteChips(p.Reviewers)
 			}
-			block := line + "\n" + meta
-			if i == m.cursor {
-				block = Selected.Render(block)
-			}
+			// Second line of the row also gets the bar so the cursor
+			// reads as one block from top to bottom.
+			metaLine := gutter + meta
+			block := line + "\n" + metaLine
 			b.WriteString(block)
 			b.WriteString("\n")
 			// Faint separator between rows (skip after the last one
@@ -312,6 +381,12 @@ func (m ListModel) View() string {
 // padding on each side. Current widest: " CHECKING " = 10. We give a
 // 2-char cushion so neighbouring columns don't kiss the badge.
 const stateColWidth = 12
+
+// cursorGutter is the leftmost two columns reserved for the cursor
+// marker. Plain spaces on non-selected rows; "▌ " (in the cursor
+// color) on the selected row. Defined once so the header alignment
+// can subtract the same prefix.
+const cursorGutter = "  "
 
 // listCols holds the rendered widths of each column in the PR list.
 // Title is the elastic column — it absorbs slack space when the terminal

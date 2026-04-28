@@ -21,6 +21,7 @@ var (
 	TabOn    lipgloss.Style
 	TabOff   lipgloss.Style
 	Selected lipgloss.Style
+	Cursor   lipgloss.Style
 	Faint    lipgloss.Style
 	HelpBox  lipgloss.Style
 	Approve  lipgloss.Style
@@ -58,6 +59,7 @@ func applyStyles(t theme.Theme) {
 	TabOn = s.TabOn
 	TabOff = s.TabOff
 	Selected = s.Selected
+	Cursor = s.Cursor
 	Faint = s.Faint
 	HelpBox = s.HelpBox
 	Approve = s.Approve

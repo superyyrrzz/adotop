@@ -12,16 +12,19 @@ import (
 )
 
 type detailLoadedMsg struct {
-	detail *ado.PRDetail
-	err    error
+	detail    *ado.PRDetail
+	err       error
+	fromCache bool
 }
 type filesLoadedMsg struct {
-	files []ado.FileChange
-	err   error
+	files     []ado.FileChange
+	err       error
+	fromCache bool
 }
 type statusesLoadedMsg struct {
-	statuses []ado.StatusCheck
-	err      error
+	statuses  []ado.StatusCheck
+	err       error
+	fromCache bool
 }
 
 type DetailModel struct {
@@ -42,6 +45,11 @@ type DetailModel struct {
 	// Model; we only read it during renderHeader. Anchored threads are
 	// rendered separately under the file's diff and live on Model.
 	prThreads []ado.Thread
+	// fileThreadCounts maps file path -> count of (filtered) threads
+	// anchored to that file. Populated by SetPRThreads from the same
+	// thread list, so the badge in the file list reflects the same
+	// showResolved filter as the comments block under the diff.
+	fileThreadCounts map[string]int
 	// treeMemo caches the result of buildFileTree(m.files). The same
 	// keypress fans out to neighborFile, DisplayNeighbors, and the
 	// renderFilesBlock — without memoization we sort the file slice 3-4
@@ -70,21 +78,25 @@ func (m DetailModel) SetMyID(id string) DetailModel {
 }
 
 // SetPRThreads stashes the PR-level threads (those not anchored to a
-// file) so renderHeader can show a Discussion section. Pass the full
-// thread list — the setter filters down to PR-level itself so the
-// caller doesn't have to remember the convention.
+// file) so renderHeader can show a Discussion section, and populates
+// per-file thread counts so the file list can show a 💬 N badge. Pass
+// the full thread list — the setter splits PR-level vs file-anchored
+// itself so callers don't have to remember the convention.
 func (m DetailModel) SetPRThreads(all []ado.Thread, includeResolved bool) DetailModel {
 	out := make([]ado.Thread, 0, len(all))
+	counts := map[string]int{}
 	for _, t := range all {
-		if t.FilePath != "" {
-			continue
-		}
 		if !includeResolved && t.IsResolved() {
 			continue
 		}
-		out = append(out, t)
+		if t.FilePath == "" {
+			out = append(out, t)
+			continue
+		}
+		counts[t.FilePath]++
 	}
 	m.prThreads = out
+	m.fileThreadCounts = counts
 	return m
 }
 
@@ -161,6 +173,15 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 			m.loadErr = msg.err.Error()
 		} else {
 			m.detail = msg.detail
+			// Refresh the summary too — reviewer votes and merge status can
+			// change between PR-open and now (someone approves while you're
+			// reading), and the header reads m.summary not m.detail. Without
+			// this the detail header stays frozen at open-time votes even
+			// after r/refresh and after action-done auto-reload. Skip iff
+			// the live detail has no reviewer info (defensive).
+			if msg.detail != nil {
+				m.summary = msg.detail.PRSummary
+			}
 		}
 	case filesLoadedMsg:
 		if msg.err != nil {
@@ -474,6 +495,9 @@ func (m DetailModel) renderFilesBlock(_ bool, headerLines int) string {
 		}
 		f := m.files[r.fileIdx]
 		line := fmt.Sprintf("%s%s%s  %s", strings.Repeat("  ", r.depth), marker, f.ChangeType, r.label)
+		if n := m.fileThreadCounts[f.Path]; n > 0 {
+			line += "  " + Faint.Render(fmt.Sprintf("💬 %d", n))
+		}
 		if r.fileIdx == m.cursor {
 			line = Selected.Render(line)
 		}

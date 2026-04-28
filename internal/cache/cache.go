@@ -11,9 +11,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/renzeyu/adotop/internal/ado"
 )
+
+// nowFn is a seam for tests; production code uses time.Now.
+var nowFn = time.Now
 
 const schemaVersion = 1
 
@@ -126,6 +130,32 @@ func (s *Store) RecordVisit(pr ado.PRSummary) error {
 		}
 	}
 	return writeJSON(s.recentsPath(), RecentsSnapshot{Schema: schemaVersion, PRs: out})
+}
+
+// PatchRecents rewrites the entry for pr.ID in the recents file with
+// pr's contents (votes, status, etc.) — preserves the existing slot
+// position so it doesn't get bumped to the top like RecordVisit does.
+// No-op when the PR isn't present in recents (the user hasn't visited
+// it yet) or when there's no recents file.
+func (s *Store) PatchRecents(pr ado.PRSummary) error {
+	if s == nil || pr.ID == 0 {
+		return nil
+	}
+	cur, ok := s.LoadRecents()
+	if !ok || len(cur) == 0 {
+		return nil
+	}
+	patched := false
+	for i := range cur {
+		if cur[i].ID == pr.ID {
+			cur[i] = pr
+			patched = true
+		}
+	}
+	if !patched {
+		return nil
+	}
+	return writeJSON(s.recentsPath(), RecentsSnapshot{Schema: schemaVersion, PRs: cur})
 }
 
 func readJSON(path string, out any) bool {
