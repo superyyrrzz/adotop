@@ -1098,8 +1098,13 @@ func (m Model) detailPreviewView() string {
 	layout := m.detailLayout()
 	detail := m.detail.SetPaneSize(layout.leftWidth, layout.bodyHeight)
 	left := detail.ViewWithFocus(m.detailFocus == focusFiles)
-	right := m.previewPaneView()
 	if !layout.split {
+		// Single-column layout: stack the two panes vertically. The
+		// preview still gets the bordered chrome so the user sees it
+		// as a discrete unit, just full-width.
+		previewBody := m.previewPaneBody()
+		previewTitle := m.previewPaneTitle()
+		right := borderedPane(previewTitle, previewBody, layout.rightWidth, maxInt(6, layout.bodyHeight/2), m.detailFocus == focusDiff)
 		return strings.Join([]string{left, "", right}, "\n")
 	}
 	leftPane := lipgloss.NewStyle().
@@ -1107,30 +1112,43 @@ func (m Model) detailPreviewView() string {
 		MaxWidth(layout.leftWidth).
 		Height(layout.bodyHeight).
 		Render(left)
-	rightPane := lipgloss.NewStyle().
-		BorderLeft(true).
-		BorderForeground(PaneBorder).
-		PaddingLeft(1).
-		Width(layout.rightWidth).
-		MaxWidth(layout.rightWidth).
-		Height(layout.bodyHeight).
-		Render(right)
+	previewBody := m.previewPaneBody()
+	previewTitle := m.previewPaneTitle()
+	rightPane := borderedPane(previewTitle, previewBody, layout.rightWidth, layout.bodyHeight, m.detailFocus == focusDiff)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, rightPane)
 }
 
-func (m Model) previewPaneView() string {
-	dot := "○ "
-	if m.detailFocus == focusDiff {
-		dot = "● "
+// previewPaneTitle returns the label spliced into the right pane's
+// border. The selected file path is what's actually useful — the
+// previous "Diff Preview" label was redundant chrome since the user
+// already knows they're looking at a diff.
+func (m Model) previewPaneTitle() string {
+	if m.preview.file != "" {
+		return m.preview.file
 	}
-	title := Header.Render(dot + "Diff Preview")
+	if f, ok := m.detail.SelectedFile(); ok {
+		return f.Path
+	}
+	return "Diff"
+}
+
+// previewPaneBody is what goes inside the bordered preview pane. No
+// title prefix — the border carries that — just the diff viewport, or
+// a placeholder when no file is loaded.
+func (m Model) previewPaneBody() string {
 	if m.preview.file == "" {
 		if _, ok := m.detail.SelectedFile(); !ok {
-			return title + "\n" + Faint.Render("No changed files available.")
+			return Faint.Render("No changed files available.")
 		}
-		return title + "\n" + Faint.Render("Loading selected file diff…")
+		return Faint.Render("Loading selected file diff…")
 	}
-	return title + "\n" + m.preview.View()
+	return m.preview.View()
+}
+
+// previewPaneView is retained as a thin shim for any caller that still
+// wants the "title + body" string form (currently only tests).
+func (m Model) previewPaneView() string {
+	return m.previewPaneTitle() + "\n" + m.previewPaneBody()
 }
 
 type previewLayout struct {
@@ -1177,10 +1195,13 @@ func (m Model) diffViewportSize(target diffTarget) (int, int) {
 	switch target {
 	case diffTargetPreview:
 		layout := m.detailLayout()
+		// borderedPane wraps the preview in a rounded border + 1col
+		// inner padding, eating paneChromeWidth horizontally and
+		// paneChromeHeight vertically. The viewport sees the inside.
 		if layout.split {
-			return maxInt(20, layout.rightWidth-2), maxInt(3, layout.bodyHeight-2)
+			return maxInt(20, layout.rightWidth-paneChromeWidth), maxInt(3, layout.bodyHeight-paneChromeHeight)
 		}
-		return maxInt(20, layout.rightWidth), maxInt(6, layout.bodyHeight/2-2)
+		return maxInt(20, layout.rightWidth-paneChromeWidth), maxInt(6, layout.bodyHeight/2-paneChromeHeight)
 	default:
 		return maxInt(20, m.width), maxInt(3, m.height-5)
 	}

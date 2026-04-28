@@ -90,10 +90,13 @@ func TestDetailViewShowsPreviewPane(t *testing.T) {
 	})
 
 	out := m.View()
-	if !strings.Contains(out, "Diff Preview") {
-		t.Fatalf("missing preview pane title:\n%s", out)
+	// The bordered preview pane uses the file path as its title now;
+	// "Diff Preview" was redundant chrome. Body must contain the +
+	// hunk so we know the diff actually rendered inside the box.
+	if !strings.Contains(out, "/src/login.go") {
+		t.Fatalf("missing preview pane file-path title:\n%s", out)
 	}
-	if !strings.Contains(out, "/src/login.go") || !strings.Contains(out, "new") {
+	if !strings.Contains(out, "new") {
 		t.Fatalf("missing preview diff content:\n%s", out)
 	}
 }
@@ -288,22 +291,29 @@ func TestDetailFocusIndicatorMovesWithFocus(t *testing.T) {
 		content: []byte("--- a/x\n+++ b/x\n+hi\n"), target: diffTargetPreview,
 	})
 
+	// Files focus: left-pane Files header still uses the ● dot
+	// indicator (it's a section sub-header inside a chrome-free pane,
+	// not a pane title — the dot pattern is appropriate there).
 	out := m.detailPreviewView()
 	if !strings.Contains(out, "● Files") {
 		t.Fatalf("expected files header to show focus dot:\n%s", out)
 	}
-	if strings.Contains(out, "● Diff Preview") {
-		t.Fatalf("diff header should not show focus dot when files focused:\n%s", out)
+	// The right pane no longer has a "Diff Preview" header — the
+	// rounded border carries the file path as the title and the
+	// border color is the focus signal. Just confirm the file path
+	// title is present and the dot-style focus marker is absent.
+	if strings.Contains(out, "● Diff") {
+		t.Fatalf("diff pane should not use the ● dot focus marker:\n%s", out)
 	}
 
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = mm.(Model)
 	out = m.detailPreviewView()
-	if !strings.Contains(out, "● Diff Preview") {
-		t.Fatalf("expected diff header to show focus dot:\n%s", out)
-	}
 	if strings.Contains(out, "● Files") {
 		t.Fatalf("files header should not show focus dot when diff focused:\n%s", out)
+	}
+	if strings.Contains(out, "● Diff") {
+		t.Fatalf("diff pane should never use the ● dot focus marker:\n%s", out)
 	}
 }
 
