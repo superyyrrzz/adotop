@@ -6,6 +6,7 @@
 
 # Go build/test artifacts
 *.exe
+*.exe~
 *.test
 *.out
 coverage.txt
