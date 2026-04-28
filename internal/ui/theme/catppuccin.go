@@ -31,5 +31,6 @@ func newCatppuccinMocha() Theme {
 		PillNeutralFg: lipgloss.Color("#ffffff"),
 
 		PillFgOnSaturated: lipgloss.Color("#11111b"), // Catppuccin "Crust": near-black, reads cleanly on every accent.
+		PillFgOnLight:     lipgloss.Color("#11111b"),
 	}
 }

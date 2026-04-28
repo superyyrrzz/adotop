@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/renzeyu/adotop/internal/config"
@@ -104,5 +105,32 @@ func TestTopbarHandlesMissingOrgProject(t *testing.T) {
 	out := renderTopbar(m)
 	if !strings.Contains(out, "(no org)") || !strings.Contains(out, "(no project)") {
 		t.Fatalf("missing-config placeholders should show:\n%s", out)
+	}
+}
+
+// TestTopbarUsesShortTabLabelInBreadcrumb is the regression guard for
+// the "All reviewing eats the right zone" complaint. The tab strip
+// itself can carry the long label; the topbar can't, because it's a
+// shared chrome line that has to coexist with identity + clock.
+//
+// Asserts both: the long form does not appear, AND the short form does.
+func TestTopbarUsesShortTabLabelInBreadcrumb(t *testing.T) {
+	m := newTestModel()
+	m.cfg = config.Config{Org: "ceapex", Project: "Engineering"}
+	m.user = "renzeyu"
+	m.width = 120
+
+	// Switch to the All-reviewing tab.
+	for i := 0; i < 3; i++ {
+		mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		m = mm.(Model)
+	}
+
+	out := renderTopbar(m)
+	if strings.Contains(out, "All reviewing") {
+		t.Fatalf("topbar should NOT use the long tab label:\n%s", out)
+	}
+	if !strings.Contains(out, "Reviewing") {
+		t.Fatalf("topbar should use the short tab label:\n%s", out)
 	}
 }

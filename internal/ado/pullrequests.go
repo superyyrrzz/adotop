@@ -31,6 +31,25 @@ func (t Tab) String() string {
 	return "?"
 }
 
+// Short returns a one-word label for the tab, suitable for breadcrumbs
+// and other space-constrained chrome. Using String() in the topbar's
+// deepest crumb pushed "All reviewing" into the right-zone identity at
+// any width below ~120 cells; Short() solves that without sacrificing
+// the descriptive long label in the tab strip itself.
+func (t Tab) Short() string {
+	switch t {
+	case TabRecents:
+		return "Recents"
+	case TabAssigned:
+		return "Assigned"
+	case TabCreated:
+		return "Created"
+	case TabReviewRequested:
+		return "Reviewing"
+	}
+	return "?"
+}
+
 type ListPRFilter struct {
 	Project string
 	Tab     Tab

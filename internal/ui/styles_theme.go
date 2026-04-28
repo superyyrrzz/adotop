@@ -90,7 +90,7 @@ func NewStyles(t theme.Theme) Styles {
 		// has its own bg/fg pair so it doesn't degrade to grey-on-grey.
 		PillGood:    pillStyle(t.Green, t.PillFgOnSaturated),
 		PillBad:     pillStyle(t.Red, t.PillFgOnSaturated),
-		PillWarn:    pillStyle(t.Yellow, t.PillFgOnSaturated),
+		PillWarn:    pillStyle(t.Yellow, t.PillFgOnLight),
 		PillInfo:    pillStyle(t.Sky, t.PillFgOnSaturated),
 		PillNeutral: pillStyle(t.PillNeutralBg, t.PillNeutralFg),
 		PillDone:    pillStyle(t.Mauve, t.PillFgOnSaturated),

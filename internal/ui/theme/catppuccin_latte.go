@@ -29,5 +29,6 @@ func newCatppuccinLatte() Theme {
 		PillNeutralFg: lipgloss.Color("#000000"),
 
 		PillFgOnSaturated: lipgloss.Color("#000000"),
+		PillFgOnLight:     lipgloss.Color("#000000"),
 	}
 }

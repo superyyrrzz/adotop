@@ -34,7 +34,7 @@ func TestPillContrastFloor(t *testing.T) {
 			{"PillNeutral", th.PillNeutralBg, th.PillNeutralFg},
 			{"PillGood", th.Green, th.PillFgOnSaturated},
 			{"PillBad", th.Red, th.PillFgOnSaturated},
-			{"PillWarn", th.Yellow, th.PillFgOnSaturated},
+			{"PillWarn", th.Yellow, th.PillFgOnLight},
 			{"PillInfo", th.Sky, th.PillFgOnSaturated},
 			{"PillDone", th.Mauve, th.PillFgOnSaturated},
 		}
@@ -56,11 +56,15 @@ func TestPillContrastFloor(t *testing.T) {
 // pairs follow the convention that survives any reasonable terminal
 // palette: chip text on bright pill bg uses 15 (bright white) — never
 // 0 (black), which on translucent terminals can match the bg too
-// closely.
+// closely. Yellow is the exception — too bright for white text — and
+// uses ANSI 0.
 func TestSystemPillsUseHighContrastIndices(t *testing.T) {
 	th := New("system")
 	if th.PillFgOnSaturated != lipgloss.Color("15") {
 		t.Fatalf("system PillFgOnSaturated should be ANSI 15 (bright white) for palette safety, got %q", th.PillFgOnSaturated)
+	}
+	if th.PillFgOnLight != lipgloss.Color("0") {
+		t.Fatalf("system PillFgOnLight should be ANSI 0 (black) so DRAFT/yellow chips stay readable, got %q", th.PillFgOnLight)
 	}
 	// Neutral pill: 8 (bright black) bg + 15 (bright white) fg is the
 	// conventional high-contrast greyscale pair.

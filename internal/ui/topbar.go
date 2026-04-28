@@ -57,7 +57,10 @@ func topbarCrumbs(m Model) []string {
 	}
 	switch m.screen {
 	case screenList:
-		out = append(out, m.list.Tab().String())
+		// Use the short tab label so the deepest crumb stays compact —
+		// "All reviewing" was bumping into the right-zone identity at
+		// every realistic terminal width.
+		out = append(out, m.list.Tab().Short())
 	case screenDetail:
 		s := m.detail.Summary()
 		if s.ID > 0 {

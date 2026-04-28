@@ -39,12 +39,19 @@ type Theme struct {
 	PillNeutralFg lipgloss.Color
 
 	// PillFgOnSaturated is the foreground used on top of the saturated
-	// pill backgrounds (Green/Yellow/Sky/Mauve/Red). On truecolor themes
+	// pill backgrounds (Green/Sky/Mauve/Red). On truecolor themes
 	// this is black — the bright bg carries the contrast. On the system
 	// (ANSI base-16) theme it's bright white, because terminal palettes
 	// often pair "0" (black) too closely with their default background
 	// for the chip text to register.
 	PillFgOnSaturated lipgloss.Color
+
+	// PillFgOnLight is the foreground for pills with VERY bright
+	// backgrounds — Yellow specifically. White-on-yellow fails contrast
+	// on every palette and is the classic "draft chip is unreadable"
+	// bug. On every theme this is a near-black so the label punches
+	// through.
+	PillFgOnLight lipgloss.Color
 }
 
 // New resolves a Theme from an explicit override or terminal detection.

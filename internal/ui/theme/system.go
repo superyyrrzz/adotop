@@ -57,5 +57,9 @@ func newSystem() Theme {
 		// pin chip text to "15" (bright white). Loses the
 		// dark-on-bright look but guarantees the label is readable.
 		PillFgOnSaturated: lipgloss.Color("15"),
+
+		// Yellow is too bright for white text — black-on-yellow is the
+		// universal high-contrast convention for warning chips.
+		PillFgOnLight: lipgloss.Color("0"),
 	}
 }
