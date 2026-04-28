@@ -180,7 +180,7 @@ func renderThread(t ado.Thread, expand bool, width int) string {
 
 	if !expand {
 		head := fmt.Sprintf("  %s %s  %s: %s",
-			bullet, Faint.Render(loc), Header.Render(first.Author), squeezeOneLine(first.Content, 200))
+			bullet, Faint.Render(loc), Header.Render(first.Author), squeezeCommentOneLine(first.Content, 200))
 		if t.IsResolved() {
 			head = Faint.Render(head)
 		}
@@ -194,7 +194,8 @@ func renderThread(t ado.Thread, expand bool, width int) string {
 
 	// Expanded form. Header carries location + author of the OP; the
 	// body is rendered on its own indented lines so newlines and code
-	// blocks stay readable.
+	// blocks stay readable. renderCommentBody handles HTML and
+	// markdown bodies — ADO returns either, depending on author.
 	const bodyIndent = "      "
 	head := fmt.Sprintf("  %s %s  %s:", bullet, Faint.Render(loc), Header.Render(first.Author))
 	if t.IsResolved() {
@@ -202,10 +203,10 @@ func renderThread(t ado.Thread, expand bool, width int) string {
 	}
 	b.WriteString(head)
 	b.WriteString("\n")
-	b.WriteString(wrapBodyLines(first.Content, bodyIndent, width))
+	b.WriteString(renderCommentBody(first.Content, width, bodyIndent))
 	for _, c := range t.Comments[1:] {
 		b.WriteString(fmt.Sprintf("  ↳ %s:\n", Header.Render(c.Author)))
-		b.WriteString(wrapBodyLines(c.Content, bodyIndent, width))
+		b.WriteString(renderCommentBody(c.Content, width, bodyIndent))
 	}
 	return b.String()
 }
@@ -328,7 +329,7 @@ func renderPRDiscussion(threads []ado.Thread) string {
 		line := fmt.Sprintf("  %s %s: %s",
 			bullet,
 			Header.Render(first.Author),
-			squeezeOneLine(first.Content, 140))
+			squeezeCommentOneLine(first.Content, 140))
 		if len(t.Comments) > 1 {
 			line += Faint.Render(fmt.Sprintf("  [%d more]", len(t.Comments)-1))
 		}
