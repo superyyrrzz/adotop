@@ -250,6 +250,10 @@ func (m ListModel) View() string {
 		b.WriteString(Faint.Render(header))
 		b.WriteString("\n")
 		start, end := m.window(len(rows))
+		// compactRows is true on narrow terminals where the second-line
+		// metadata band would wrap. We fall back to the original glyph
+		// strip in that case so users on small windows aren't punished.
+		compactRows := m.width > 0 && m.width < 90
 		for i := start; i < end; i++ {
 			p := rows[i]
 			stateText, stateStyle := prStateBadgeCompact(p)
@@ -268,14 +272,26 @@ func (m ListModel) View() string {
 				truncCols(p.SourceBranch, cols.source),
 				truncCols(p.TargetBranch, cols.target),
 				padCols(age(p.CreatedAt), cols.age))
-			if i == m.cursor {
-				line = Selected.Render(line)
+			var meta string
+			if compactRows {
+				// Narrow terminal: keep original glyph strip.
+				meta = "    " + voteGlyphs(p.Reviewers)
+			} else {
+				meta = "    " + voteChips(p.Reviewers)
 			}
-			b.WriteString(line)
+			block := line + "\n" + meta
+			if i == m.cursor {
+				block = Selected.Render(block)
+			}
+			b.WriteString(block)
 			b.WriteString("\n")
-			b.WriteString("    ")
-			b.WriteString(voteGlyphs(p.Reviewers))
-			b.WriteString("\n")
+			// Faint separator between rows (skip after the last one
+			// in the visible window so the section doesn't end on a
+			// rule).
+			if i < end-1 {
+				b.WriteString(Faint.Render(strings.Repeat("─", m.rowSeparatorWidth())))
+				b.WriteString("\n")
+			}
 		}
 		if start > 0 || end < len(rows) {
 			b.WriteString(Faint.Render(fmt.Sprintf("  [%d-%d of %d]\n", start+1, end, len(rows))))
@@ -385,6 +401,79 @@ func voteGlyphs(rs []ado.ReviewerVote) string {
 		b.WriteString(g)
 	}
 	return b.String()
+}
+
+// voteChips renders one chip per reviewer in the form "[ <glyph> <name> ]"
+// using the same per-vote color scheme as voteGlyphs but with the
+// reviewer's display name attached so the user knows *who* voted what.
+// Required reviewers get a trailing "*" inside the chip.
+//
+// Names are truncated to 12 chars to keep the second line bounded; the
+// caller is expected to fall back to voteGlyphs on narrow terminals.
+func voteChips(rs []ado.ReviewerVote) string {
+	if len(rs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, r := range rs {
+		var glyph string
+		var style lipgloss.Style
+		switch {
+		case r.Vote >= 10:
+			glyph, style = "✓", Approve
+		case r.Vote >= 5:
+			glyph, style = "✓~", Approve
+		case r.Vote <= -10:
+			glyph, style = "✗", Reject
+		case r.Vote <= -5:
+			glyph, style = "⏳", Wait
+		default:
+			glyph, style = "·", None
+		}
+		name := truncate(firstName(r.DisplayName), 12)
+		if r.IsRequired {
+			name += "*"
+		}
+		chip := style.Render(fmt.Sprintf("[ %s %s ]", glyph, name))
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString(chip)
+	}
+	return b.String()
+}
+
+// firstName trims a "Last, First" or "First Last" display name down to
+// the first token so chips stay readable on narrow rows.
+func firstName(displayName string) string {
+	if displayName == "" {
+		return ""
+	}
+	// "Last, First" form: take the part after the comma.
+	if i := strings.Index(displayName, ","); i >= 0 {
+		rest := strings.TrimSpace(displayName[i+1:])
+		if rest != "" {
+			displayName = rest
+		}
+	}
+	if i := strings.Index(displayName, " "); i >= 0 {
+		return displayName[:i]
+	}
+	return displayName
+}
+
+// rowSeparatorWidth returns how wide the inter-row rule should be. Uses
+// the available terminal width minus a small inset so it visually
+// belongs to the table rather than the screen edge.
+func (m ListModel) rowSeparatorWidth() int {
+	if m.width <= 0 {
+		return 60
+	}
+	w := m.width - 4
+	if w < 20 {
+		return 20
+	}
+	return w
 }
 
 func truncate(s string, n int) string {
