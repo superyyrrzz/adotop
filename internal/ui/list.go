@@ -40,11 +40,34 @@ func NewList(keys KeyMap) ListModel {
 func (m ListModel) Tab() ado.Tab { return m.tab }
 
 // window returns [start, end) indices of rows that fit in the current view,
-// keeping m.cursor visible. Each row uses 2 lines; tabs+blank reserve 2,
-// filter/footer reserve 2.
+// keeping m.cursor visible.
+//
+// Per-row vertical budget:
+//   - non-compact (two-line) row: 1 data line + 1 meta line + 1 separator = 3
+//   - compact (one-line) row:     1 data line + 1 separator           = 2
+//
+// Chrome above/below the list rows we have to leave room for:
+//   - topbar bar + rule                  = 2
+//   - blank between header and body      = 1
+//   - tab strip + blank-blank gap        = 2 (renderTabs writes "\n\n")
+//   - column header                      = 1
+//   - blank between body and footer      = 1
+//   - statusline                         = 1
+//   - "[start-end of total]" pager line  = 1 (only when scrolling, but
+//                                            we always reserve it so the
+//                                            pager doesn't shove rows
+//                                            out of view at the moment
+//                                            it appears)
+//
+// Total chrome = 9. Underestimating chrome scrolls the topbar and tab
+// strip off the top of the alt-screen, which is how the "topbar
+// disappears" bug manifests in tall lists.
 func (m ListModel) window(total int) (int, int) {
-	const rowLines = 2
-	const chrome = 4
+	rowLines := 3
+	if m.width > 0 && m.width < 90 {
+		rowLines = 2
+	}
+	const chrome = 9
 	if m.height <= 0 {
 		return 0, total
 	}
