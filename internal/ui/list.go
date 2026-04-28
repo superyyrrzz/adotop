@@ -241,7 +241,7 @@ func (m ListModel) View() string {
 	} else {
 		header := fmt.Sprintf("%s %s %s %s %s   %s   %s",
 			padCols("ID", cols.id),
-			padCols("State", 10),
+			padCols("State", stateColWidth),
 			padCols("Title", cols.title),
 			padCols("Author", cols.author),
 			padCols("Source", cols.source),
@@ -253,9 +253,16 @@ func (m ListModel) View() string {
 		for i := start; i < end; i++ {
 			p := rows[i]
 			stateText, stateStyle := prStateBadgeCompact(p)
+			pill := stateStyle.Render(stateText)
+			// Pad the *visible* width to stateColWidth so the Title
+			// column lines up across rows. lipgloss.Width strips ANSI.
+			pad := stateColWidth - lipgloss.Width(pill)
+			if pad > 0 {
+				pill += strings.Repeat(" ", pad)
+			}
 			line := fmt.Sprintf("%s %s %s %s %s → %s   %s",
 				padCols(fmt.Sprintf("#%d", p.ID), cols.id),
-				stateStyle.Render(padCols(stateText, 10)),
+				pill,
 				truncCols(p.Title, cols.title),
 				truncCols(p.Author, cols.author),
 				truncCols(p.SourceBranch, cols.source),
@@ -283,6 +290,12 @@ func (m ListModel) View() string {
 	}
 	return b.String()
 }
+
+// stateColWidth is the visible-width budget for the State column. It
+// must accommodate the widest pill label plus its 1-char horizontal
+// padding on each side. Current widest: " CHECKING " = 10. We give a
+// 2-char cushion so neighbouring columns don't kiss the badge.
+const stateColWidth = 12
 
 // listCols holds the rendered widths of each column in the PR list.
 // Title is the elastic column — it absorbs slack space when the terminal

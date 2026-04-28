@@ -728,41 +728,42 @@ func statusGlyph(state string) string {
 	}
 }
 
-// prStateBadgeCompact returns a short label and the lipgloss style to
-// color it with — separated so the caller can pad the plain text to a
-// fixed column width before applying ANSI escapes (runewidth doesn't
-// strip ANSI). Suitable for tabular list views.
+// prStateBadgeCompact returns a short label and the lipgloss pill style
+// for it. The label is the raw text (caller can measure visible width
+// with runewidth/lipgloss.Width(style.Render(label))); the style fills
+// a colored background so the badge reads as a chip rather than just
+// colored text. Suitable for tabular list views.
 func prStateBadgeCompact(s ado.PRSummary) (string, lipgloss.Style) {
 	switch strings.ToLower(s.Status) {
 	case "completed":
-		return "MERGED", Approve
+		return "MERGED", PillDone
 	case "abandoned":
-		return "ABANDON", Reject
+		return "ABANDON", PillNeutral
 	}
 	if s.Draft {
-		return "DRAFT", Wait
+		return "DRAFT", PillWarn
 	}
 	switch strings.ToLower(s.MergeStatus) {
 	case "conflicts":
-		return "CONFLICT", Reject
+		return "CONFLICT", PillBad
 	case "rejectedbypolicy":
-		return "BLOCKED", Reject
+		return "BLOCKED", PillBad
 	case "queued":
-		return "MERGING", Wait
+		return "MERGING", PillWarn
 	case "failure":
-		return "FAILED", Reject
+		return "FAILED", PillBad
 	case "notset":
-		return "CHECKING", Wait
+		return "CHECKING", PillInfo
 	case "succeeded":
-		return "OPEN", Approve
+		return "OPEN", PillGood
 	}
 	if strings.ToLower(s.Status) == "active" || s.Status == "" {
-		return "OPEN", Faint
+		return "OPEN", PillGood
 	}
-	return strings.ToUpper(s.Status), Faint
+	return strings.ToUpper(s.Status), PillNeutral
 }
 
-// prStateBadge returns a short, colorized label summarizing the PR's
+// prStateBadge returns a short pill-styled label summarizing the PR's
 // lifecycle + draft + mergeability. Always returns a non-empty badge so
 // the user can see the state at a glance.
 //
@@ -770,33 +771,33 @@ func prStateBadgeCompact(s ado.PRSummary) (string, lipgloss.Style) {
 func prStateBadge(s ado.PRSummary) string {
 	switch strings.ToLower(s.Status) {
 	case "completed":
-		return Approve.Render("[MERGED]")
+		return PillDone.Render("MERGED")
 	case "abandoned":
-		return Reject.Render("[ABANDONED]")
+		return PillNeutral.Render("ABANDONED")
 	}
 	if s.Draft {
-		return Wait.Render("[DRAFT]")
+		return PillWarn.Render("DRAFT")
 	}
 	switch strings.ToLower(s.MergeStatus) {
 	case "conflicts":
-		return Reject.Render("[CONFLICTS]")
+		return PillBad.Render("CONFLICTS")
 	case "rejectedbypolicy":
-		return Reject.Render("[POLICY-BLOCKED]")
+		return PillBad.Render("POLICY-BLOCKED")
 	case "queued":
-		return Wait.Render("[MERGING]")
+		return PillWarn.Render("MERGING")
 	case "failure":
-		return Reject.Render("[MERGE-FAILED]")
+		return PillBad.Render("MERGE-FAILED")
 	case "notset":
-		return Wait.Render("[CHECKING]")
+		return PillInfo.Render("CHECKING")
 	case "succeeded":
-		return Approve.Render("[READY]")
+		return PillGood.Render("READY")
 	}
 	// Fall-through: PR is active but server hasn't reported a merge status
 	// yet (rare). Show "ACTIVE" rather than nothing.
 	if strings.ToLower(s.Status) == "active" || s.Status == "" {
-		return Faint.Render("[ACTIVE]")
+		return PillNeutral.Render("ACTIVE")
 	}
-	return Faint.Render("[" + strings.ToUpper(s.Status) + "]")
+	return PillNeutral.Render(strings.ToUpper(s.Status))
 }
 
 // voteLabel maps an ADO reviewer vote integer to a (glyph, text) pair.

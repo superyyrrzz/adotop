@@ -32,6 +32,15 @@ var (
 	// raw color (not Style) because lipgloss.NewStyle().BorderForeground
 	// wants a TerminalColor.
 	PaneBorder lipgloss.Color
+
+	// Pill* are filled-bg badge styles. See styles_theme.go for the
+	// per-color rationale.
+	PillGood    lipgloss.Style
+	PillBad     lipgloss.Style
+	PillWarn    lipgloss.Style
+	PillInfo    lipgloss.Style
+	PillNeutral lipgloss.Style
+	PillDone    lipgloss.Style
 )
 
 func init() {
@@ -56,4 +65,10 @@ func applyStyles(t theme.Theme) {
 	Wait = s.Wait
 	None = s.None
 	PaneBorder = s.PaneBorder
+	PillGood = s.PillGood
+	PillBad = s.PillBad
+	PillWarn = s.PillWarn
+	PillInfo = s.PillInfo
+	PillNeutral = s.PillNeutral
+	PillDone = s.PillDone
 }
