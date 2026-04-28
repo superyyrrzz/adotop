@@ -15,7 +15,11 @@ import (
 type statusMode int
 
 const (
-	modeNormal  statusMode = iota // blue: routine navigation
+	modeNormal  statusMode = iota // neutral: routine navigation. The
+	//                               mode pill is reserved for "look at
+	//                               me" states (CONFIRM/MENU/ERROR);
+	//                               NORMAL is the resting state and
+	//                               should fade into the chrome.
 	modeError                     // red:  error or footer error
 	modePending                   // yellow: confirmation prompt awaiting y/n
 	modeMenu                      // magenta: modal overlay (vote menu)
@@ -42,7 +46,7 @@ func (s statusMode) style() lipgloss.Style {
 	case modeMenu:
 		return PillDone
 	}
-	return PillInfo
+	return PillNeutral
 }
 
 // segment is one block of the statusline: a label rendered with a

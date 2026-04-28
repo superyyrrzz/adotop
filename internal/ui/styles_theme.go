@@ -52,7 +52,7 @@ func NewStyles(t theme.Theme) Styles {
 		Header:   lipgloss.NewStyle().Bold(true).Foreground(t.Blue),
 		Faint:    lipgloss.NewStyle().Foreground(t.Subtext),
 		ErrLine:  lipgloss.NewStyle().Foreground(t.Red),
-		TabOn:    lipgloss.NewStyle().Bold(true).Underline(true).Foreground(t.Mauve),
+		TabOn:    pillStyle(t.Mauve, lipgloss.Color("0")),
 		TabOff:   lipgloss.NewStyle().Foreground(t.Subtext),
 		Selected: lipgloss.NewStyle().Reverse(true),
 		Cursor:   lipgloss.NewStyle().Foreground(t.Mauve).Bold(true),
@@ -68,15 +68,16 @@ func NewStyles(t theme.Theme) Styles {
 
 		PaneBorder: t.Overlay,
 
-		// Pills: bg color does the work. fg pinned to black on bright
-		// pills so legibility holds across user terminal palettes; the
-		// neutral pill uses overlay-on-text since both ends are quiet.
-		PillGood:    pillStyle(t.Green, lipgloss.Color("0")),
-		PillBad:     pillStyle(t.Red, lipgloss.Color("15")),
-		PillWarn:    pillStyle(t.Yellow, lipgloss.Color("0")),
-		PillInfo:    pillStyle(t.Sky, lipgloss.Color("0")),
-		PillNeutral: pillStyle(t.Overlay, t.Text),
-		PillDone:    pillStyle(t.Mauve, lipgloss.Color("0")),
+		// Pills: bg color does the work. fg comes from the theme so each
+		// variant picks the foreground that actually contrasts on its
+		// own palette (see Theme.PillFgOnSaturated). The neutral pill
+		// has its own bg/fg pair so it doesn't degrade to grey-on-grey.
+		PillGood:    pillStyle(t.Green, t.PillFgOnSaturated),
+		PillBad:     pillStyle(t.Red, t.PillFgOnSaturated),
+		PillWarn:    pillStyle(t.Yellow, t.PillFgOnSaturated),
+		PillInfo:    pillStyle(t.Sky, t.PillFgOnSaturated),
+		PillNeutral: pillStyle(t.PillNeutralBg, t.PillNeutralFg),
+		PillDone:    pillStyle(t.Mauve, t.PillFgOnSaturated),
 	}
 }
 

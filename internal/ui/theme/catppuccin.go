@@ -23,5 +23,13 @@ func newCatppuccinMocha() Theme {
 		// foregrounds readable on Mocha's #1e1e2e base.
 		DiffAddBg: lipgloss.Color("#26343a"),
 		DiffDelBg: lipgloss.Color("#3a2638"),
+
+		// Neutral pill: Surface bg gives a clear chip outline against
+		// Base, and #ffffff fg drives WCAG-AA contrast (~10:1) so the
+		// label reads as text, not "muted noise".
+		PillNeutralBg: lipgloss.Color("#45475a"), // Overlay
+		PillNeutralFg: lipgloss.Color("#ffffff"),
+
+		PillFgOnSaturated: lipgloss.Color("#11111b"), // Catppuccin "Crust": near-black, reads cleanly on every accent.
 	}
 }

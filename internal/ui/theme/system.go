@@ -27,9 +27,9 @@ func newSystem() Theme {
 	return Theme{
 		Base:    lipgloss.Color(""), // empty = terminal default
 		Surface: lipgloss.Color(""),
-		Overlay: lipgloss.Color("8"),  // bright black for borders
-		Text:    lipgloss.Color(""),   // default fg
-		Subtext: lipgloss.Color("8"),  // faint = bright black
+		Overlay: lipgloss.Color("8"), // bright black for borders
+		Text:    lipgloss.Color(""),  // default fg
+		Subtext: lipgloss.Color("7"), // ANSI 7 (white/light grey): readable for footer/hints. ANSI 8 was indistinguishable from default bg on many palettes.
 
 		Blue:   lipgloss.Color("12"), // bright blue
 		Mauve:  lipgloss.Color("13"), // bright magenta
@@ -45,5 +45,17 @@ func newSystem() Theme {
 		// and match the look from before the theme port.
 		DiffAddBg: lipgloss.Color("22"),
 		DiffDelBg: lipgloss.Color("52"),
+
+		// Neutral pill on system: ANSI 8 (bright black) bg + ANSI 15
+		// (bright white) fg. Hard contrast pair that survives any
+		// terminal palette tune.
+		PillNeutralBg: lipgloss.Color("8"),
+		PillNeutralFg: lipgloss.Color("15"),
+
+		// On 4-bit palettes "0" can match the user's terminal bg too
+		// closely (translucent backgrounds, low-contrast schemes), so
+		// pin chip text to "15" (bright white). Loses the
+		// dark-on-bright look but guarantees the label is readable.
+		PillFgOnSaturated: lipgloss.Color("15"),
 	}
 }

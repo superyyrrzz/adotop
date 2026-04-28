@@ -30,6 +30,21 @@ type Theme struct {
 	// can pick contrast that actually works against the active Base.
 	DiffAddBg lipgloss.Color
 	DiffDelBg lipgloss.Color
+
+	// PillNeutralBg / PillNeutralFg: the muted "no-status" chip color.
+	// Lives on the theme rather than being derived from Overlay+Text
+	// because that combination came out grey-on-grey on every variant.
+	// Each theme picks a pair with a measurable contrast ratio.
+	PillNeutralBg lipgloss.Color
+	PillNeutralFg lipgloss.Color
+
+	// PillFgOnSaturated is the foreground used on top of the saturated
+	// pill backgrounds (Green/Yellow/Sky/Mauve/Red). On truecolor themes
+	// this is black — the bright bg carries the contrast. On the system
+	// (ANSI base-16) theme it's bright white, because terminal palettes
+	// often pair "0" (black) too closely with their default background
+	// for the chip text to register.
+	PillFgOnSaturated lipgloss.Color
 }
 
 // New resolves a Theme from an explicit override or terminal detection.

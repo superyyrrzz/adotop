@@ -21,5 +21,13 @@ func newCatppuccinLatte() Theme {
 
 		DiffAddBg: lipgloss.Color("#d4ead0"),
 		DiffDelBg: lipgloss.Color("#f1d4d8"),
+
+		// Neutral pill on light: Latte's Overlay (#9ca0b0) is too washed
+		// out to read against Base. Use a darker grey + black fg so the
+		// chip is unambiguously a chip; ratio ~7:1.
+		PillNeutralBg: lipgloss.Color("#7c7f93"),
+		PillNeutralFg: lipgloss.Color("#000000"),
+
+		PillFgOnSaturated: lipgloss.Color("#000000"),
 	}
 }
