@@ -345,14 +345,20 @@ func (m Model) approveCurrent() tea.Cmd {
 // ADO's scale: 10=approved, 5=approved-with-suggestions, 0=no-vote,
 // -5=waiting-for-author, -10=rejected. label is the success message
 // shown in the footer.
+//
+// Logs the request to the file-only slog at Info level so we have a
+// record of what was attempted; the result lands as actionDoneMsg and
+// is logged by that handler at Error level if it fails.
 func (m Model) setVoteCurrent(vote int, label string) tea.Cmd {
 	s := m.detail.Summary()
 	if s.ID == 0 || s.RepoID == "" || m.myID == "" {
+		slog.Info("action skipped", "kind", "vote", "pr", s.ID, "reason", "missing PR/repo/identity")
 		return func() tea.Msg {
 			return actionDoneMsg{kind: "vote", prID: s.ID, err: fmt.Errorf("vote: missing PR/repo/identity")}
 		}
 	}
 	repoID, prID := s.RepoID, s.ID
+	slog.Info("action requested", "kind", "vote", "pr", prID, "vote", vote, "label", label)
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -365,11 +371,13 @@ func (m Model) setVoteCurrent(vote int, label string) tea.Cmd {
 func (m Model) abandonCurrent() tea.Cmd {
 	s := m.detail.Summary()
 	if s.ID == 0 || s.RepoID == "" {
+		slog.Info("action skipped", "kind", "abandon", "pr", s.ID, "reason", "missing PR/repo")
 		return func() tea.Msg {
 			return actionDoneMsg{kind: "abandon", prID: s.ID, err: fmt.Errorf("abandon: missing PR/repo")}
 		}
 	}
 	repoID, prID := s.RepoID, s.ID
+	slog.Info("action requested", "kind", "abandon", "pr", prID)
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -557,9 +565,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return mm, cmd
 	case actionDoneMsg:
 		if msg.err != nil {
+			// File-only log: the footer banner is transient so an
+			// after-the-fact debug needs the structured record. Prefer
+			// the raw err.Error() over friendlyErr — the friendly form
+			// strips the ADO-side reason which is exactly what we
+			// want when reading the log.
+			slog.Error("action failed", "kind", msg.kind, "pr", msg.prID, "err", msg.err.Error())
 			m.footerErr = fmt.Sprintf("%s PR #%d: %s", msg.kind, msg.prID, friendlyErr(msg.err))
 			return m, nil
 		}
+		slog.Info("action succeeded", "kind", msg.kind, "pr", msg.prID, "notes", msg.notes)
 		m.footerErr = fmt.Sprintf("PR #%d %s", msg.prID, msg.notes)
 		// Optimistic local update for votes: ADO sometimes echoes the
 		// reviewer back under a different identity descriptor (group vs
