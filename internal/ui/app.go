@@ -905,7 +905,7 @@ func (m Model) handleVoteMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	header := Header.Render(fmt.Sprintf("adotop  %s/%s  user=%s", orPlaceholder(m.cfg.Org, "(no org)"), orPlaceholder(m.cfg.Project, "(no project)"), m.user))
+	header := renderTopbar(m)
 	var body string
 	switch m.screen {
 	case screenList:
