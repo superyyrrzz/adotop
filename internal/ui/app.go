@@ -82,6 +82,11 @@ type Model struct {
 	threads        []ado.Thread
 	showResolved   bool
 	expandedThread map[int]bool
+	// threadCursor records the active thread index per file path. Per-file
+	// rather than global so jumping back to a file restores the cursor.
+	// Absent or out-of-range == no thread selected; the user must press
+	// [/] to land on a thread before C/x become meaningful.
+	threadCursor map[string]int
 	// wrapDiff toggles soft-wrap on the diff preview viewport. Off by
 	// default — most lines fit and visual line counts matter for
 	// scanning large diffs. Press `w` to enable when reading a file
@@ -147,6 +152,7 @@ func New(cfg config.Config, client *ado.Client) Model {
 		scrollMem:     map[string]int{},
 		previewCache:  newDiffBodyCache(5),
 		expandedThread: map[int]bool{},
+		threadCursor:   map[string]int{},
 	}
 	st, err := cache.New()
 	if err != nil {
@@ -706,6 +712,7 @@ func (m Model) openDetail(s ado.PRSummary) (Model, tea.Cmd) {
 	m.scrollMem = map[string]int{}
 	m.threads = nil
 	m.expandedThread = map[int]bool{}
+	m.threadCursor = map[string]int{}
 	m.screen = screenDetail
 	// NOTE: previewCache survives PR re-open so bouncing list↔detail
 	// stays snappy. Refresh (R) explicitly clears the current PR below.

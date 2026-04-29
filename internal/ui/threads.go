@@ -116,7 +116,11 @@ func (m Model) previewCommentsBlock() string {
 		return ""
 	}
 	threads := m.threadsForFile(f.Path)
-	return renderCommentsBlock(threads, m.expandedThread, m.showResolved, m.threads, f.Path, m.preview.vp.Width)
+	selected := 0
+	if idx, ok := m.threadCursor[f.Path]; ok && idx >= 0 && idx < len(threads) {
+		selected = threads[idx].ID
+	}
+	return renderCommentsBlockWithCursor(threads, m.expandedThread, m.showResolved, m.threads, f.Path, m.preview.vp.Width, selected)
 }
 
 // composeDiffWithComments stitches the rendered diff and the comments block
@@ -137,6 +141,14 @@ func composeDiffWithComments(diffBody []byte, commentsBlock string) string {
 // lines of expanded threads may go. Pass 0 to skip wrapping (long lines
 // will extend off the right edge).
 func renderCommentsBlock(threads []ado.Thread, expanded map[int]bool, showResolved bool, all []ado.Thread, path string, width int) string {
+	return renderCommentsBlockWithCursor(threads, expanded, showResolved, all, path, width, 0)
+}
+
+// renderCommentsBlockWithCursor renders the same block but draws a gutter
+// mark on the thread whose ID == selectedID. selectedID==0 means nothing
+// is selected and no gutter mark is drawn — preserves the prior look for
+// callers that don't track a cursor (PR-level discussion, tests).
+func renderCommentsBlockWithCursor(threads []ado.Thread, expanded map[int]bool, showResolved bool, all []ado.Thread, path string, width int, selectedID int) string {
 	if len(threads) == 0 && !hasAnyForFile(all, path) {
 		return ""
 	}
@@ -169,7 +181,32 @@ func renderCommentsBlock(threads []ado.Thread, expanded map[int]bool, showResolv
 		return b.String()
 	}
 	for _, t := range threads {
-		b.WriteString(renderThread(t, expanded[t.ID], width))
+		// Draw a 2-col gutter: ▎ + space when this thread is selected,
+		// 2 spaces otherwise. Gutter eats into the available width so
+		// the thread renderer doesn't overflow the pane.
+		gutter := "  "
+		if selectedID != 0 && t.ID == selectedID {
+			gutter = Cursor.Render("▎") + " "
+		}
+		gutterW := 2
+		threadW := width - gutterW
+		if width == 0 {
+			threadW = 0 // pass-through "no wrap"
+		}
+		rendered := renderThread(t, expanded[t.ID], threadW)
+		// Prepend gutter to every line of the rendered thread so wrapped
+		// content stays under the same column. renderThread always
+		// emits a trailing \n, so the last split element is empty —
+		// don't write the gutter for that one.
+		lines := strings.Split(rendered, "\n")
+		for i, line := range lines {
+			if i == len(lines)-1 && line == "" {
+				continue
+			}
+			b.WriteString(gutter)
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
 	}
 	return b.String()
 }
