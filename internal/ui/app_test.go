@@ -361,6 +361,31 @@ func TestQuitKeyOnDetailGoesBackNotQuit(t *testing.T) {
 	}
 }
 
+// q from the diff pane should drop focus back to the file list, not
+// leave the PR. This mirrors the user's mental model of files→diff
+// being a cascaded drill-in: one back-step at a time.
+func TestQuitKeyOnDiffFocusReturnsToFilesFocus(t *testing.T) {
+	m := newDetailModel(t)
+	m.detailFocus = focusDiff
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = mm.(Model)
+	if cmd != nil {
+		t.Fatalf("q on diff focus should not return a cmd, got %v", cmd)
+	}
+	if m.screen != screenDetail {
+		t.Fatalf("q on diff focus should NOT leave detail screen, got %v", m.screen)
+	}
+	if m.detailFocus != focusFiles {
+		t.Fatalf("q on diff focus should drop focus to files, got %v", m.detailFocus)
+	}
+	// A second q from files focus then leaves the PR.
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = mm.(Model)
+	if m.screen != screenList {
+		t.Fatalf("second q should return to list, got %v", m.screen)
+	}
+}
+
 func TestQuitKeyOnListQuits(t *testing.T) {
 	m := newTestModel()
 	m.screen = screenList

@@ -798,13 +798,14 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.detailFocus = focusDiff
 		}
 		return m, nil
-	case keyMatches(msg, m.keys.Back):
-		m.screen = screenList
-		m.detailFocus = focusFiles
-		return m, nil
-	case keyMatches(msg, m.keys.Quit):
-		// On Detail, q acts like Back so a stray keystroke doesn't kill
-		// the program. ctrl+c still quits unconditionally.
+	case keyMatches(msg, m.keys.Back), keyMatches(msg, m.keys.Quit):
+		// Cascaded back-out: from diff focus, step back to the file list
+		// (one screen feels like two). From file focus, leave the PR.
+		// ctrl+c still hard-quits unconditionally.
+		if m.detailFocus == focusDiff {
+			m.detailFocus = focusFiles
+			return m, nil
+		}
 		m.screen = screenList
 		m.detailFocus = focusFiles
 		return m, nil
