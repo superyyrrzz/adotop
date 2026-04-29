@@ -10,6 +10,7 @@ import (
 
 // Comment is a single message in an ADO PR thread.
 type Comment struct {
+	ID            int
 	Author        string
 	Content       string
 	PublishedDate time.Time
@@ -51,6 +52,7 @@ type rawThreadCtx struct {
 }
 
 type rawComment struct {
+	ID     int `json:"id"`
 	Author struct {
 		DisplayName string `json:"displayName"`
 	} `json:"author"`
@@ -105,6 +107,7 @@ func (c *Client) GetPullRequestThreads(ctx context.Context, repoID string, prID 
 			}
 			pub, _ := time.Parse(time.RFC3339, rc.PublishedDate)
 			t.Comments = append(t.Comments, Comment{
+				ID:            rc.ID,
 				Author:        rc.Author.DisplayName,
 				Content:       rc.Content,
 				PublishedDate: pub,

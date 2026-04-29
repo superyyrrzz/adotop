@@ -61,3 +61,29 @@ func TestGetPullRequestThreadsKeepsSystemBotComments(t *testing.T) {
 		}
 	}
 }
+
+// Comment.ID is needed downstream so reply writes can populate
+// parentCommentId. Without it we can't address an existing comment.
+func TestGetPullRequestThreads_PopulatesCommentID(t *testing.T) {
+	body := `{"value":[{
+		"id": 7, "status": "active",
+		"comments": [{"id": 101, "content": "first", "commentType": "text", "author": {"displayName": "Alice"}, "publishedDate": "2026-04-27T00:00:00Z"}]
+	}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	c := NewClient("ignored", &fakeTokens{})
+	c.BaseURL = srv.URL
+	got, err := c.GetPullRequestThreads(context.Background(), "repo", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || len(got[0].Comments) != 1 {
+		t.Fatalf("unexpected shape: %+v", got)
+	}
+	if got[0].Comments[0].ID != 101 {
+		t.Fatalf("Comment.ID not populated: got %d", got[0].Comments[0].ID)
+	}
+}
