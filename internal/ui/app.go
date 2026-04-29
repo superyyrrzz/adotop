@@ -101,6 +101,12 @@ type Model struct {
 	// the statusline shows a small ↻ glyph so the user knows the cached
 	// snapshot they're looking at is being verified against the server.
 	detailInflight int
+
+	// initialPRID, when non-zero, makes the app jump to that PR's detail
+	// screen as soon as auth resolves (myID is needed for the fetch).
+	// Cleared after the jump fires so it doesn't repeat on later auth
+	// refreshes. Set by Run() from the CLI argument.
+	initialPRID int
 }
 
 // pendingAction is a destructive operation awaiting y/n confirmation.
@@ -444,7 +450,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				slog.Warn("cache: save identity", "err", err)
 			}
 		}
-		return m, m.loadList(m.list.Tab())
+		cmds := []tea.Cmd{m.loadList(m.list.Tab())}
+		if m.initialPRID != 0 {
+			prID := m.initialPRID
+			m.initialPRID = 0
+			cmds = append(cmds, func() tea.Msg { return jumpRequestedMsg{ID: prID} })
+		}
+		return m, tea.Batch(cmds...)
 	case tickMsg:
 		// Refresh all three server-backed tabs regardless of screen so
 		// when the user returns from detail view the list is current.
@@ -1434,9 +1446,14 @@ func lcsUnifiedHunks(a, b []string, ctx int) []string {
 	return hunks
 }
 
-// Run starts the Bubble Tea program with the alt screen.
-func Run(cfg config.Config, client *ado.Client) error {
-	p := tea.NewProgram(New(cfg, client), tea.WithAltScreen())
+// Run starts the Bubble Tea program with the alt screen. If initialPRID
+// is non-zero, the app jumps directly to that PR's detail screen on
+// startup (the list still loads in the background so Esc returns to a
+// populated list).
+func Run(cfg config.Config, client *ado.Client, initialPRID int) error {
+	m := New(cfg, client)
+	m.initialPRID = initialPRID
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }
