@@ -149,3 +149,30 @@ func TestPostPRThread_FileLevelIncludesThreadContext(t *testing.T) {
 		t.Fatalf("file-level thread missing threadContext.filePath: %+v", gotBody)
 	}
 }
+
+func TestPostThreadComment_PostsToCommentsEndpoint(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &gotBody)
+		_, _ = w.Write([]byte(`{"id": 555, "content": "reply", "author": {"displayName": "Me"}, "commentType": "text", "publishedDate": "2026-04-29T00:00:00Z"}`))
+	}))
+	defer srv.Close()
+	c := NewClient("ignored", &fakeTokens{})
+	c.BaseURL = srv.URL
+	cm, err := c.PostThreadComment(context.Background(), "repo", 42, 7, "reply")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(gotPath, "/threads/7/comments") {
+		t.Fatalf("path: got %s", gotPath)
+	}
+	if pid, _ := gotBody["parentCommentId"].(float64); pid != 1 {
+		t.Fatalf("reply must address parentCommentId=1 (root): %+v", gotBody)
+	}
+	if cm.ID != 555 {
+		t.Fatalf("expected comment.ID=555, got %d", cm.ID)
+	}
+}

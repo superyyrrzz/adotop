@@ -130,7 +130,35 @@ func rawThreadToThread(r rawThread) Thread {
 	return t
 }
 
-// PostPRThread creates a new comment thread on the PR. If filePath is
+// PostThreadComment appends a comment to an existing thread. ADO threads
+// model their messages as a chain rooted at the first comment (id=1
+// within that thread). We always reply at root to keep the linear UX
+// shape we render — sub-threading is supported by the API but isn't
+// useful here.
+func (c *Client) PostThreadComment(ctx context.Context, repoID string, prID, threadID int, body string) (Comment, error) {
+	if repoID == "" || prID == 0 || threadID == 0 || strings.TrimSpace(body) == "" {
+		return Comment{}, fmt.Errorf("PostThreadComment: repoID, prID, threadID, body required")
+	}
+	path := fmt.Sprintf("/_apis/git/repositories/%s/pullrequests/%d/threads/%d/comments",
+		url.PathEscape(repoID), prID, threadID)
+	payload := map[string]any{
+		"parentCommentId": 1,
+		"content":         body,
+		"commentType":     1,
+	}
+	var rc rawComment
+	if err := c.PostJSON(ctx, path, payload, &rc); err != nil {
+		return Comment{}, err
+	}
+	pub, _ := time.Parse(time.RFC3339, rc.PublishedDate)
+	return Comment{
+		ID:            rc.ID,
+		Author:        rc.Author.DisplayName,
+		Content:       rc.Content,
+		PublishedDate: pub,
+		Type:          rc.CommentType,
+	}, nil
+}
 // empty, the thread is PR-level (no file anchor); otherwise it's anchored
 // to the file's right side. Line-level anchoring isn't supported here —
 // the TUI has no diff line cursor to drive it.
