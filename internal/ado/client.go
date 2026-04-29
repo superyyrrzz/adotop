@@ -118,6 +118,20 @@ func (c *Client) PutJSON(ctx context.Context, path string, body any, out any) er
 	return c.do(ctx, http.MethodPut, u, bytes.NewReader(buf), out)
 }
 
+// PostJSON sends a POST with a JSON body. Used for creating threads and
+// appending thread comments. `out` may be nil to discard the response.
+func (c *Client) PostJSON(ctx context.Context, path string, body any, out any) error {
+	u, err := c.resolve(path)
+	if err != nil {
+		return err
+	}
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	return c.do(ctx, http.MethodPost, u, bytes.NewReader(buf), out)
+}
+
 func (c *Client) resolve(path string) (string, error) {
 	if path == "" || path[0] != '/' {
 		path = "/" + path
