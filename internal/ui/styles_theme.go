@@ -22,6 +22,10 @@ type Styles struct {
 	// fight with chip backgrounds the way Selected.Reverse did.
 	Cursor   lipgloss.Style
 	HelpBox  lipgloss.Style
+	// ModalBox is the floating loading/info overlay. Differs from
+	// HelpBox in that it carries an explicit Background so it reads
+	// as opaque against the screen content visible behind/around it.
+	ModalBox lipgloss.Style
 	Approve  lipgloss.Style
 	Reject   lipgloss.Style
 	Wait     lipgloss.Style
@@ -76,6 +80,12 @@ func NewStyles(t theme.Theme) Styles {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(t.Overlay).
 			Padding(0, 1),
+		ModalBox: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(t.Overlay).
+			Background(t.Surface).
+			Foreground(t.Text).
+			Padding(0, 2),
 		Approve: lipgloss.NewStyle().Foreground(t.Green),
 		Reject:  lipgloss.NewStyle().Foreground(t.Red),
 		Wait:    lipgloss.NewStyle().Foreground(t.Yellow),

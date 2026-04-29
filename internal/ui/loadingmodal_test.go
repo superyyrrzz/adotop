@@ -17,15 +17,22 @@ func TestOverlayLoadingModalShowsPRID(t *testing.T) {
 	}
 }
 
-// TestOverlayLoadingModalUsesFallbackOnZeroSize: when called before
-// WindowSize arrives (width or height is 0), the modal must still
-// render — falling back to a sensible default size — so the user
-// always sees the affordance. The earlier behavior of returning body
-// unchanged made the modal invisible in real launches because auth
-// frequently completed before the first WindowSizeMsg.
-func TestOverlayLoadingModalUsesFallbackOnZeroSize(t *testing.T) {
-	out := overlayLoadingModal("body", 7, 0, 0)
+// TestOverlayLoadingModalCompositesOverBackground: with a real body
+// the modal must replace only the centered slice — text outside the
+// box's column range survives so the user can see the screen behind.
+func TestOverlayLoadingModalCompositesOverBackground(t *testing.T) {
+	bg := strings.Repeat("LEFT-EDGE-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-RIGHT-EDGE\n", 10)
+	out := overlayLoadingModal(bg, 7, 60, 10)
 	if !strings.Contains(out, "Loading PR #7") {
-		t.Fatalf("zero-size call should still render modal text; got:\n%s", out)
+		t.Fatalf("modal text missing:\n%s", out)
+	}
+	// Both the left and right ends of at least one bg row must survive
+	// — the box is centered so it shouldn't reach the column-0 or last
+	// column of a 60-wide canvas.
+	if !strings.Contains(out, "LEFT-EDGE") {
+		t.Fatalf("bg left edge clobbered:\n%s", out)
+	}
+	if !strings.Contains(out, "RIGHT-EDGE") {
+		t.Fatalf("bg right edge clobbered:\n%s", out)
 	}
 }

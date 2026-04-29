@@ -24,6 +24,7 @@ var (
 	Cursor   lipgloss.Style
 	Faint    lipgloss.Style
 	HelpBox  lipgloss.Style
+	ModalBox lipgloss.Style
 	Approve  lipgloss.Style
 	Reject   lipgloss.Style
 	Wait     lipgloss.Style
@@ -62,6 +63,7 @@ func applyStyles(t theme.Theme) {
 	Cursor = s.Cursor
 	Faint = s.Faint
 	HelpBox = s.HelpBox
+	ModalBox = s.ModalBox
 	Approve = s.Approve
 	Reject = s.Reject
 	Wait = s.Wait

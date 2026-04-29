@@ -995,11 +995,8 @@ func (m Model) View() string {
 		body = m.detailPreviewView()
 	}
 	if m.loadingPRModal != 0 {
-		// Hide the underlying screen entirely while the modal is up so
-		// the user sees a clean overlay over an empty canvas instead of
-		// the half-loaded list flashing through. The screen-content
-		// load continues in the background.
-		body = ""
+		// Composite the modal over the live body so the user can still
+		// see the underlying screen behind/around the box.
 		bodyH := m.height - lipgloss.Height(header) - lipgloss.Height(footer) - 2
 		if bodyH < 3 {
 			bodyH = 24
