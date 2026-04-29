@@ -848,8 +848,15 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Toggle expansion of every (visible) thread on the focused file.
 			f, ok := m.detail.SelectedFile()
 			if ok {
-				m = m.toggleThreadsForFile(f.Path)
+				var expanded bool
+				m, expanded = m.toggleThreadsForFile(f.Path)
 				m = m.refreshPreview()
+				// Auto-scroll to the comments block when expanding so
+				// the user lands on what they just opened instead of
+				// having to PageDown past the diff.
+				if expanded {
+					m = m.scrollPreviewToComments()
+				}
 			}
 			return m, nil
 		}

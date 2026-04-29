@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
@@ -24,13 +26,14 @@ func (m Model) threadsForFile(path string) []ado.Thread {
 	return out
 }
 
-// toggleThreadsForFile flips the expanded state of every visible thread on
+// toggleThreadsForFile flips the expand state of every visible thread on
 // the given file. If any thread is currently collapsed, this expands all of
-// them; otherwise collapses all.
-func (m Model) toggleThreadsForFile(path string) Model {
+// them; otherwise collapses all. Returns the new model and a bool that's
+// true when the toggle EXPANDED (so the caller can auto-scroll into view).
+func (m Model) toggleThreadsForFile(path string) (Model, bool) {
 	threads := m.threadsForFile(path)
 	if len(threads) == 0 {
-		return m
+		return m, false
 	}
 	anyCollapsed := false
 	for _, t := range threads {
@@ -42,7 +45,7 @@ func (m Model) toggleThreadsForFile(path string) Model {
 	for _, t := range threads {
 		m.expandedThread[t.ID] = anyCollapsed
 	}
-	return m
+	return m, anyCollapsed
 }
 
 // refreshPreview re-renders the diff preview viewport's content so that
@@ -77,6 +80,31 @@ func (m Model) refreshPreview() Model {
 	// (toggle, expand, refresh) or message arrivals (diffLoadedMsg,
 	// threadsLoadedMsg) — never from j/k — so the rebuild cost is fine.
 	m.preview.vp.SetContent(body + composed)
+	return m
+}
+
+// scrollPreviewToComments puts the start of the comments block at the
+// top of the viewport. Used after Enter expands threads so the user
+// doesn't have to scroll past the diff to find what they just opened.
+//
+// The diff body and the comments block are concatenated into a single
+// viewport string; the comments start at line `lipgloss.Height(body)`.
+// We clamp to the viewport's max scroll position so a comments block
+// that's shorter than one screen still scrolls to a sensible spot.
+func (m Model) scrollPreviewToComments() Model {
+	if m.previewKey == "" {
+		return m
+	}
+	rendered, ok := m.previewCache.Rendered(m.previewKey)
+	if !ok {
+		return m
+	}
+	body := rendered
+	if m.wrapDiff {
+		body = wrapDiffLines(body, m.preview.vp.Width)
+	}
+	off := lipgloss.Height(body)
+	m.preview.vp.SetYOffset(off)
 	return m
 }
 
@@ -192,10 +220,30 @@ func renderThread(t ado.Thread, expand bool, width int) string {
 		if t.IsResolved() {
 			head = Faint.Render(head)
 		}
-		b.WriteString(head)
+		more := ""
 		if len(t.Comments) > 1 {
-			b.WriteString(Faint.Render(fmt.Sprintf("  [%d more — enter to expand]", len(t.Comments)-1)))
+			more = Faint.Render(fmt.Sprintf("  [%d more — enter to expand]", len(t.Comments)-1))
 		}
+		// Hard-fit to the pane width: if head + more would overflow,
+		// shrink the more-hint to a compact form first (so the affordance
+		// stays visible even in narrow panes), then truncate head with
+		// ellipsis. Without this the viewport silently clips at its right
+		// edge and the user sees no indication that there's hidden text
+		// or that the thread has more comments.
+		if width > 0 && lipgloss.Width(head)+lipgloss.Width(more) > width {
+			if len(t.Comments) > 1 {
+				more = Faint.Render(fmt.Sprintf(" +%d", len(t.Comments)-1))
+			}
+			budget := width - lipgloss.Width(more)
+			if budget < 8 {
+				budget = 8
+			}
+			if lipgloss.Width(head) > budget {
+				head = ansi.Truncate(head, budget-1, "…")
+			}
+		}
+		b.WriteString(head)
+		b.WriteString(more)
 		b.WriteString("\n")
 		return b.String()
 	}
