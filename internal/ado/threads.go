@@ -130,6 +130,29 @@ func rawThreadToThread(r rawThread) Thread {
 	return t
 }
 
+// validThreadStatuses is the closed set of statuses ADO accepts on PATCH.
+// "unknown" is a read-side fallback (server may emit it) and not writable.
+var validThreadStatuses = map[string]bool{
+	"active": true, "fixed": true, "wontFix": true,
+	"closed": true, "byDesign": true, "pending": true,
+}
+
+// PatchThreadStatus changes a thread's status. The TUI uses only "active"
+// and "fixed" via the toggle key today; the full enum is exposed for
+// future per-status menus.
+func (c *Client) PatchThreadStatus(ctx context.Context, repoID string, prID, threadID int, status string) error {
+	if repoID == "" || prID == 0 || threadID == 0 {
+		return fmt.Errorf("PatchThreadStatus: repoID, prID, threadID required")
+	}
+	if !validThreadStatuses[status] {
+		return fmt.Errorf("PatchThreadStatus: unknown status %q", status)
+	}
+	path := fmt.Sprintf("/_apis/git/repositories/%s/pullrequests/%d/threads/%d",
+		url.PathEscape(repoID), prID, threadID)
+	body := map[string]any{"status": status}
+	return c.PatchJSON(ctx, path, body, nil)
+}
+
 // PostThreadComment appends a comment to an existing thread. ADO threads
 // model their messages as a chain rooted at the first comment (id=1
 // within that thread). We always reply at root to keep the linear UX

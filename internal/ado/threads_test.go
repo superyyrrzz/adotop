@@ -176,3 +176,38 @@ func TestPostThreadComment_PostsToCommentsEndpoint(t *testing.T) {
 		t.Fatalf("expected comment.ID=555, got %d", cm.ID)
 	}
 }
+
+func TestPatchThreadStatus_SendsExpectedPatch(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &gotBody)
+		_, _ = w.Write([]byte(`{"id":7,"status":"fixed"}`))
+	}))
+	defer srv.Close()
+	c := NewClient("ignored", &fakeTokens{})
+	c.BaseURL = srv.URL
+	if err := c.PatchThreadStatus(context.Background(), "repo", 42, 7, "fixed"); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodPatch {
+		t.Fatalf("method: got %s", gotMethod)
+	}
+	if !strings.Contains(gotPath, "/threads/7") {
+		t.Fatalf("path: got %s", gotPath)
+	}
+	if gotBody["status"] != "fixed" {
+		t.Fatalf("body: %+v", gotBody)
+	}
+}
+
+func TestPatchThreadStatus_RejectsUnknownStatus(t *testing.T) {
+	c := NewClient("ignored", &fakeTokens{})
+	err := c.PatchThreadStatus(context.Background(), "r", 1, 1, "bogus")
+	if err == nil || !strings.Contains(err.Error(), "status") {
+		t.Fatalf("expected validation error, got %v", err)
+	}
+}
