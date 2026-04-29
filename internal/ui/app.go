@@ -107,6 +107,14 @@ type Model struct {
 	// Cleared after the jump fires so it doesn't repeat on later auth
 	// refreshes. Set by Run() from the CLI argument.
 	initialPRID int
+
+	// loadingPRModal is non-zero while a "Loading PR #N…" modal is
+	// overlaying the screen during URL-launch. Armed in Run() so the
+	// very first frame already shows it (avoids list flash) and held
+	// through the jump+detail fetches. Cleared by clearLoadingModalMsg
+	// after a min-dwell so the modal doesn't blink imperceptibly when
+	// the network round-trip is fast.
+	loadingPRModal int
 }
 
 // pendingAction is a destructive operation awaiting y/n confirmation.
@@ -168,6 +176,14 @@ type connDataMsg struct {
 }
 
 type tickMsg time.Time
+
+// clearLoadingModalMsg is delivered by a delayed timer after the URL-
+// launch jump completes. It enforces a minimum dwell time on the
+// "Loading PR #N…" modal so it stays visible long enough for the user
+// to register, even when the underlying fetch returns in a few ms.
+// The prID guard avoids dismissing a fresh modal for a different PR
+// if the user navigated quickly.
+type clearLoadingModalMsg struct{ prID int }
 
 // actionDoneMsg is the result of a write action (approve, abandon, etc.).
 type actionDoneMsg struct {
@@ -454,6 +470,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.initialPRID != 0 {
 			prID := m.initialPRID
 			m.initialPRID = 0
+			m.loadingPRModal = prID
 			cmds = append(cmds, func() tea.Msg { return jumpRequestedMsg{ID: prID} })
 		}
 		return m, tea.Batch(cmds...)
@@ -483,6 +500,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list, cmd = m.list.Update(msg)
 		return m, cmd
 	case detailLoadedMsg:
+		// Schedule the modal clear after a min-dwell so it doesn't
+		// flash imperceptibly on fast loads. Done via a delayed message
+		// rather than clearing here directly.
+		var modalClear tea.Cmd
+		if m.loadingPRModal != 0 {
+			pr := m.loadingPRModal
+			modalClear = tea.Tick(350*time.Millisecond, func(time.Time) tea.Msg {
+				return clearLoadingModalMsg{prID: pr}
+			})
+		}
 		if !msg.fromCache {
 			m = m.markDetailFetchDone()
 			if msg.err == nil {
@@ -503,7 +530,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.detail, cmd = m.detail.Update(msg)
 		m, previewCmd := m.queuePreviewForSelection()
-		return m, tea.Batch(cmd, previewCmd)
+		return m, tea.Batch(cmd, previewCmd, modalClear)
 	case filesLoadedMsg:
 		if !msg.fromCache {
 			m = m.markDetailFetchDone()
@@ -577,11 +604,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case jumpResultMsg:
 		if msg.err != nil {
+			m.loadingPRModal = 0
 			m.footerErr = fmt.Sprintf("jump #%d: %v", msg.prID, msg.err)
 			return m, nil
 		}
-		mm, cmd := m.openDetail(msg.summary)
-		return mm, cmd
+		// Modal stays up; detailLoadedMsg will dismiss it once the
+		// real PR data lands so the user transitions to a populated view.
+		return m.openDetail(msg.summary)
+	case clearLoadingModalMsg:
+		if m.loadingPRModal == msg.prID {
+			m.loadingPRModal = 0
+		}
+		return m, nil
 	case actionDoneMsg:
 		if msg.err != nil {
 			// File-only log: the footer banner is transient so an
@@ -952,12 +986,25 @@ func (m Model) handleVoteMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	header := renderTopbar(m)
+	footer := renderStatusline(m)
 	var body string
 	switch m.screen {
 	case screenList:
 		body = m.list.View()
 	case screenDetail:
 		body = m.detailPreviewView()
+	}
+	if m.loadingPRModal != 0 {
+		// Hide the underlying screen entirely while the modal is up so
+		// the user sees a clean overlay over an empty canvas instead of
+		// the half-loaded list flashing through. The screen-content
+		// load continues in the background.
+		body = ""
+		bodyH := m.height - lipgloss.Height(header) - lipgloss.Height(footer) - 2
+		if bodyH < 3 {
+			bodyH = 24
+		}
+		body = overlayLoadingModal(body, m.loadingPRModal, m.width, bodyH)
 	}
 	if m.showHelp {
 		body = HelpBox.Render(strings.Join([]string{
@@ -981,7 +1028,6 @@ func (m Model) View() string {
 			"  esc         back",
 		}, "\n"))
 	}
-	footer := renderStatusline(m)
 	// Pad the body so the footer sticks to the bottom of the terminal,
 	// regardless of how much content the current screen produced.
 	if m.height > 0 {
@@ -1453,6 +1499,12 @@ func lcsUnifiedHunks(a, b []string, ctx int) []string {
 func Run(cfg config.Config, client *ado.Client, initialPRID int) error {
 	m := New(cfg, client)
 	m.initialPRID = initialPRID
+	// Arm the modal up front so it's visible on the very first frame
+	// — otherwise the list flashes before connDataMsg arrives and sets
+	// the flag.
+	if initialPRID != 0 {
+		m.loadingPRModal = initialPRID
+	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
