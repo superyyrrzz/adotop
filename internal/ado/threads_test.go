@@ -2,6 +2,8 @@ package ado
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -85,5 +87,65 @@ func TestGetPullRequestThreads_PopulatesCommentID(t *testing.T) {
 	}
 	if got[0].Comments[0].ID != 101 {
 		t.Fatalf("Comment.ID not populated: got %d", got[0].Comments[0].ID)
+	}
+}
+
+func TestPostPRThread_PostsExpectedBody(t *testing.T) {
+	var gotPath, gotMethod string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotMethod = r.Method
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id": 999, "status": "active", "comments": [{"id": 1, "content": "hi", "author": {"displayName": "Me"}, "commentType": "text", "publishedDate": "2026-04-29T00:00:00Z"}]}`))
+	}))
+	defer srv.Close()
+	c := NewClient("ignored", &fakeTokens{})
+	c.BaseURL = srv.URL
+	th, err := c.PostPRThread(context.Background(), "myrepo", 42, "hi", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Fatalf("method: got %s", gotMethod)
+	}
+	if !strings.Contains(gotPath, "/repositories/myrepo/pullrequests/42/threads") {
+		t.Fatalf("path: got %s", gotPath)
+	}
+	comments, _ := gotBody["comments"].([]any)
+	if len(comments) != 1 {
+		t.Fatalf("body comments: %+v", gotBody)
+	}
+	first, _ := comments[0].(map[string]any)
+	if first["content"] != "hi" {
+		t.Fatalf("body content: %+v", first)
+	}
+	if _, has := gotBody["threadContext"]; has {
+		t.Fatalf("PR-level thread should omit threadContext: %+v", gotBody)
+	}
+	if th.ID != 999 {
+		t.Fatalf("expected returned thread.ID=999, got %d", th.ID)
+	}
+}
+
+func TestPostPRThread_FileLevelIncludesThreadContext(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &gotBody)
+		_, _ = w.Write([]byte(`{"id": 1000, "status": "active", "comments": []}`))
+	}))
+	defer srv.Close()
+	c := NewClient("ignored", &fakeTokens{})
+	c.BaseURL = srv.URL
+	_, err := c.PostPRThread(context.Background(), "myrepo", 42, "note", "/src/foo.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc, _ := gotBody["threadContext"].(map[string]any)
+	if tc == nil || tc["filePath"] != "/src/foo.go" {
+		t.Fatalf("file-level thread missing threadContext.filePath: %+v", gotBody)
 	}
 }

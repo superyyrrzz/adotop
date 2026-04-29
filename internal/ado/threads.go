@@ -91,33 +91,74 @@ func (c *Client) GetPullRequestThreads(ctx context.Context, repoID string, prID 
 		if r.IsDeleted {
 			continue
 		}
-		t := Thread{ID: r.ID, Status: r.Status}
-		if r.ThreadContext != nil {
-			t.FilePath = r.ThreadContext.FilePath
-			t.RightLine = r.ThreadContext.RightFileStart.Line
-			t.LeftLine = r.ThreadContext.LeftFileStart.Line
-		}
-		for _, rc := range r.Comments {
-			// Drop only auto "codeChange" notes (e.g. "force-pushed an
-			// update") — those are truly noise. Keep "system" comments:
-			// they carry real signal from bots/pipelines like GitOps,
-			// Ownership Enforcer, AI reviewers, etc.
-			if rc.CommentType == "codeChange" {
-				continue
-			}
-			pub, _ := time.Parse(time.RFC3339, rc.PublishedDate)
-			t.Comments = append(t.Comments, Comment{
-				ID:            rc.ID,
-				Author:        rc.Author.DisplayName,
-				Content:       rc.Content,
-				PublishedDate: pub,
-				Type:          rc.CommentType,
-			})
-		}
+		t := rawThreadToThread(r)
 		if len(t.Comments) == 0 {
 			continue
 		}
 		out = append(out, t)
 	}
 	return out, nil
+}
+
+// rawThreadToThread converts the raw ADO response into the public Thread
+// shape. Shared by GetPullRequestThreads and the write methods so the
+// commentType filter and field mapping stay in sync.
+func rawThreadToThread(r rawThread) Thread {
+	t := Thread{ID: r.ID, Status: r.Status}
+	if r.ThreadContext != nil {
+		t.FilePath = r.ThreadContext.FilePath
+		t.RightLine = r.ThreadContext.RightFileStart.Line
+		t.LeftLine = r.ThreadContext.LeftFileStart.Line
+	}
+	for _, rc := range r.Comments {
+		// Drop only auto "codeChange" notes (e.g. "force-pushed an
+		// update") — those are truly noise. Keep "system" comments:
+		// they carry real signal from bots/pipelines like GitOps,
+		// Ownership Enforcer, AI reviewers, etc.
+		if rc.CommentType == "codeChange" {
+			continue
+		}
+		pub, _ := time.Parse(time.RFC3339, rc.PublishedDate)
+		t.Comments = append(t.Comments, Comment{
+			ID:            rc.ID,
+			Author:        rc.Author.DisplayName,
+			Content:       rc.Content,
+			PublishedDate: pub,
+			Type:          rc.CommentType,
+		})
+	}
+	return t
+}
+
+// PostPRThread creates a new comment thread on the PR. If filePath is
+// empty, the thread is PR-level (no file anchor); otherwise it's anchored
+// to the file's right side. Line-level anchoring isn't supported here —
+// the TUI has no diff line cursor to drive it.
+//
+// The first comment on the new thread is `body`; ADO requires at least
+// one comment when creating a thread.
+func (c *Client) PostPRThread(ctx context.Context, repoID string, prID int, body, filePath string) (Thread, error) {
+	if repoID == "" || prID == 0 || strings.TrimSpace(body) == "" {
+		return Thread{}, fmt.Errorf("PostPRThread: repoID, prID, body required")
+	}
+	path := fmt.Sprintf("/_apis/git/repositories/%s/pullrequests/%d/threads",
+		url.PathEscape(repoID), prID)
+	payload := map[string]any{
+		"comments": []map[string]any{{
+			"parentCommentId": 0,
+			"content":         body,
+			"commentType":     1, // 1 = text
+		}},
+		"status": 1, // 1 = active
+	}
+	if filePath != "" {
+		payload["threadContext"] = map[string]any{
+			"filePath": filePath,
+		}
+	}
+	var raw rawThread
+	if err := c.PostJSON(ctx, path, payload, &raw); err != nil {
+		return Thread{}, err
+	}
+	return rawThreadToThread(raw), nil
 }
