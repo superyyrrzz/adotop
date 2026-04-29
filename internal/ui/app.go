@@ -111,10 +111,12 @@ type Model struct {
 	// loadingPRModal is non-zero while a "Loading PR #N…" modal is
 	// overlaying the screen during URL-launch. Armed in Run() so the
 	// very first frame already shows it (avoids list flash) and held
-	// through the jump+detail fetches. Cleared by clearLoadingModalMsg
-	// after a min-dwell so the modal doesn't blink imperceptibly when
-	// the network round-trip is fast.
+	// through the jump+detail fetches. Cleared by detailLoadedMsg
+	// when the real PR data lands.
 	loadingPRModal int
+	// loadingFrame is the current spinner frame index, advanced by
+	// loadingTickMsg every ~100ms while the modal is up.
+	loadingFrame int
 }
 
 // pendingAction is a destructive operation awaiting y/n confirmation.
@@ -177,14 +179,6 @@ type connDataMsg struct {
 
 type tickMsg time.Time
 
-// clearLoadingModalMsg is delivered by a delayed timer after the URL-
-// launch jump completes. It enforces a minimum dwell time on the
-// "Loading PR #N…" modal so it stays visible long enough for the user
-// to register, even when the underlying fetch returns in a few ms.
-// The prID guard avoids dismissing a fresh modal for a different PR
-// if the user navigated quickly.
-type clearLoadingModalMsg struct{ prID int }
-
 // actionDoneMsg is the result of a write action (approve, abandon, etc.).
 type actionDoneMsg struct {
 	kind  string // "vote" | "abandon"
@@ -212,7 +206,11 @@ func tick(d time.Duration) tea.Cmd {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.fetchConnectionData(), tick(m.cfg.RefreshInterval.Duration))
+	cmds := []tea.Cmd{m.fetchConnectionData(), tick(m.cfg.RefreshInterval.Duration)}
+	if m.loadingPRModal != 0 {
+		cmds = append(cmds, scheduleLoadingTick())
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) fetchConnectionData() tea.Cmd {
@@ -474,6 +472,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, func() tea.Msg { return jumpRequestedMsg{ID: prID} })
 		}
 		return m, tea.Batch(cmds...)
+	case loadingTickMsg:
+		if m.loadingPRModal == 0 {
+			return m, nil
+		}
+		m.loadingFrame++
+		return m, scheduleLoadingTick()
 	case tickMsg:
 		// Refresh all three server-backed tabs regardless of screen so
 		// when the user returns from detail view the list is current.
@@ -500,16 +504,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list, cmd = m.list.Update(msg)
 		return m, cmd
 	case detailLoadedMsg:
-		// Schedule the modal clear after a min-dwell so it doesn't
-		// flash imperceptibly on fast loads. Done via a delayed message
-		// rather than clearing here directly.
-		var modalClear tea.Cmd
-		if m.loadingPRModal != 0 {
-			pr := m.loadingPRModal
-			modalClear = tea.Tick(350*time.Millisecond, func(time.Time) tea.Msg {
-				return clearLoadingModalMsg{prID: pr}
-			})
-		}
 		if !msg.fromCache {
 			m = m.markDetailFetchDone()
 			if msg.err == nil {
@@ -530,7 +524,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.detail, cmd = m.detail.Update(msg)
 		m, previewCmd := m.queuePreviewForSelection()
-		return m, tea.Batch(cmd, previewCmd, modalClear)
+		return m, tea.Batch(cmd, previewCmd)
 	case filesLoadedMsg:
 		if !msg.fromCache {
 			m = m.markDetailFetchDone()
@@ -603,19 +597,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return jumpResultMsg{prID: prID, summary: d.PRSummary}
 		}
 	case jumpResultMsg:
+		m.loadingPRModal = 0
 		if msg.err != nil {
-			m.loadingPRModal = 0
 			m.footerErr = fmt.Sprintf("jump #%d: %v", msg.prID, msg.err)
 			return m, nil
 		}
-		// Modal stays up; detailLoadedMsg will dismiss it once the
-		// real PR data lands so the user transitions to a populated view.
 		return m.openDetail(msg.summary)
-	case clearLoadingModalMsg:
-		if m.loadingPRModal == msg.prID {
-			m.loadingPRModal = 0
-		}
-		return m, nil
 	case actionDoneMsg:
 		if msg.err != nil {
 			// File-only log: the footer banner is transient so an
@@ -995,13 +982,11 @@ func (m Model) View() string {
 		body = m.detailPreviewView()
 	}
 	if m.loadingPRModal != 0 {
-		// Composite the modal over the live body so the user can still
-		// see the underlying screen behind/around the box.
 		bodyH := m.height - lipgloss.Height(header) - lipgloss.Height(footer) - 2
 		if bodyH < 3 {
 			bodyH = 24
 		}
-		body = overlayLoadingModal(body, m.loadingPRModal, m.width, bodyH)
+		body = overlayLoadingModal(body, m.loadingPRModal, m.loadingFrame, m.width, bodyH)
 	}
 	if m.showHelp {
 		body = HelpBox.Render(strings.Join([]string{

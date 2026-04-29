@@ -41,7 +41,7 @@ func TestURLLaunchModalAppearsBeforeJumpResolves(t *testing.T) {
 	}
 
 	out := m.View()
-	if !strings.Contains(out, "Loading PR #1145743") {
+	if !strings.Contains(out, "PR #1145743") {
 		// Print the full view so we can see what's actually rendering.
 		t.Fatalf("View should contain loading modal text.\n--- View output ---\n%s\n--- end ---", out)
 	}
@@ -64,7 +64,7 @@ func TestURLLaunchModalBeforeWindowSize(t *testing.T) {
 	m = updated.(Model)
 	out := m.View()
 	t.Logf("--- VIEW (no WindowSize yet) ---\n%s\n--- END ---", stripANSI(out))
-	if !strings.Contains(out, "Loading PR #999") {
+	if !strings.Contains(out, "PR #999") {
 		t.Fatalf("modal text missing when WindowSizeMsg hasn't arrived yet")
 	}
 }

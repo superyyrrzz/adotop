@@ -20,28 +20,18 @@ func TestLoadingModalClearedOnJumpResultError(t *testing.T) {
 	}
 }
 
-// TestLoadingModalClearedByDelayedMsg: the success path keeps the
-// modal up until clearLoadingModalMsg arrives (fired by a 350ms
-// timer), so the modal stays visible through fast jump fetches.
-func TestLoadingModalClearedByDelayedMsg(t *testing.T) {
-	m := Model{}
+// TestLoadingModalClearedOnJumpResult: success path dismisses the
+// modal as soon as the screen flips from list to detail (jumpResultMsg
+// triggers openDetail). The detail screen renders a brief skeleton
+// while files/diff stream in — that's preferable to a modal lingering
+// over a screen that's already taken over.
+func TestLoadingModalClearedOnJumpResult(t *testing.T) {
+	m := newDetailModel(t)
 	m.loadingPRModal = 42
-	updated, _ := m.Update(clearLoadingModalMsg{prID: 42})
+	updated, _ := m.Update(jumpResultMsg{prID: 42, summary: m.detail.Summary()})
 	mm := updated.(Model)
 	if mm.loadingPRModal != 0 {
-		t.Fatalf("clearLoadingModalMsg should clear modal; got %d", mm.loadingPRModal)
-	}
-}
-
-// TestLoadingModalClearGuardsByPRID: a clear timer fired for an old
-// PR must not dismiss a freshly-armed modal for a different PR.
-func TestLoadingModalClearGuardsByPRID(t *testing.T) {
-	m := Model{}
-	m.loadingPRModal = 999
-	updated, _ := m.Update(clearLoadingModalMsg{prID: 42}) // old timer
-	mm := updated.(Model)
-	if mm.loadingPRModal != 999 {
-		t.Fatalf("stale clear should not dismiss current modal; got %d", mm.loadingPRModal)
+		t.Fatalf("jumpResultMsg success should clear modal; got %d", mm.loadingPRModal)
 	}
 }
 
@@ -57,7 +47,7 @@ func TestLoadingModalRendersInView(t *testing.T) {
 	mm := updated.(Model)
 	mm.loadingPRModal = 42
 	out := mm.View()
-	if !strings.Contains(out, "Loading PR #42") {
+	if !strings.Contains(out, "PR #42") {
 		t.Fatalf("View should render the loading modal; got:\n%s", out)
 	}
 }

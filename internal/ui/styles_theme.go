@@ -81,11 +81,11 @@ func NewStyles(t theme.Theme) Styles {
 			BorderForeground(t.Overlay).
 			Padding(0, 1),
 		ModalBox: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(t.Overlay).
+			Border(lipgloss.ThickBorder()).
+			BorderForeground(t.Mauve).
 			Background(t.Surface).
 			Foreground(t.Text).
-			Padding(0, 2),
+			Padding(1, 4),
 		Approve: lipgloss.NewStyle().Foreground(t.Green),
 		Reject:  lipgloss.NewStyle().Foreground(t.Red),
 		Wait:    lipgloss.NewStyle().Foreground(t.Yellow),

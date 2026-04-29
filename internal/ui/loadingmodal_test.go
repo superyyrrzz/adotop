@@ -11,9 +11,12 @@ import (
 // asserted — lipgloss is responsible for those — only the text and the
 // fact that it sits inside the bounding box.
 func TestOverlayLoadingModalShowsPRID(t *testing.T) {
-	out := overlayLoadingModal("ignored body", 1145743, 80, 24)
-	if !strings.Contains(out, "Loading PR #1145743") {
+	out := overlayLoadingModal("ignored body", 1145743, 0, 80, 24)
+	if !strings.Contains(out, "PR #1145743") {
 		t.Fatalf("overlay should name the PR ID; got:\n%s", out)
+	}
+	if !strings.Contains(out, "LOADING") {
+		t.Fatalf("overlay should carry the LOADING header; got:\n%s", out)
 	}
 }
 
@@ -22,8 +25,8 @@ func TestOverlayLoadingModalShowsPRID(t *testing.T) {
 // box's column range survives so the user can see the screen behind.
 func TestOverlayLoadingModalCompositesOverBackground(t *testing.T) {
 	bg := strings.Repeat("LEFT-EDGE-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-RIGHT-EDGE\n", 10)
-	out := overlayLoadingModal(bg, 7, 60, 10)
-	if !strings.Contains(out, "Loading PR #7") {
+	out := overlayLoadingModal(bg, 7, 0, 60, 10)
+	if !strings.Contains(out, "PR #7") {
 		t.Fatalf("modal text missing:\n%s", out)
 	}
 	// Both the left and right ends of at least one bg row must survive
