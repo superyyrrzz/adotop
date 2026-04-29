@@ -841,6 +841,20 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.detail = m.detail.SetPRThreads(m.threads, m.showResolved)
 		m = m.refreshPreview()
 		return m, nil
+	case keyMatches(msg, m.keys.NextThread):
+		if m.detailFocus != focusDiff {
+			return m, nil
+		}
+		m = m.moveThreadCursor(+1)
+		m = m.refreshPreview()
+		return m, nil
+	case keyMatches(msg, m.keys.PrevThread):
+		if m.detailFocus != focusDiff {
+			return m, nil
+		}
+		m = m.moveThreadCursor(-1)
+		m = m.refreshPreview()
+		return m, nil
 	case keyMatches(msg, m.keys.WrapDiff):
 		// Soft-wrap toggle for the diff preview. Off by default so
 		// large diffs stay scannable; on for files with long lines.

@@ -21,6 +21,10 @@ type KeyMap struct {
 	ShowResolved          key.Binding
 	WrapDiff              key.Binding
 	CtxMore, CtxLess      key.Binding
+	NextThread, PrevThread key.Binding
+	ToggleResolve          key.Binding
+	ComposeThread          key.Binding
+	ReplyThread            key.Binding
 }
 
 func DefaultKeys() KeyMap {
@@ -53,5 +57,10 @@ func DefaultKeys() KeyMap {
 		WrapDiff:     key.NewBinding(key.WithKeys("w")),
 		CtxMore:      key.NewBinding(key.WithKeys("+", "=")),
 		CtxLess:      key.NewBinding(key.WithKeys("-", "_")),
+		NextThread:   key.NewBinding(key.WithKeys("]")),
+		PrevThread:   key.NewBinding(key.WithKeys("[")),
+		ToggleResolve: key.NewBinding(key.WithKeys("x")),
+		ComposeThread: key.NewBinding(key.WithKeys("c")),
+		ReplyThread:   key.NewBinding(key.WithKeys("C")),
 	}
 }

@@ -126,13 +126,15 @@ func TestModelIgnoresStalePreviewDiffLoads(t *testing.T) {
 func newTestModel() Model {
 	keys := DefaultKeys()
 	return Model{
-		keys:          keys,
-		git:           gitlocal.New(nil),
-		list:          NewList(keys),
-		detail:        NewDetail(keys),
-		preview:       NewDiff(keys),
-		scrollMem:     map[string]int{},
-		previewCache:  newDiffBodyCache(5),
+		keys:           keys,
+		git:            gitlocal.New(nil),
+		list:           NewList(keys),
+		detail:         NewDetail(keys),
+		preview:        NewDiff(keys),
+		scrollMem:      map[string]int{},
+		previewCache:   newDiffBodyCache(5),
+		expandedThread: map[int]bool{},
+		threadCursor:   map[string]int{},
 	}
 }
 
@@ -383,6 +385,45 @@ func TestQuitKeyOnDiffFocusReturnsToFilesFocus(t *testing.T) {
 	m = mm.(Model)
 	if m.screen != screenList {
 		t.Fatalf("second q should return to list, got %v", m.screen)
+	}
+}
+
+// [/] navigate threads only when the diff pane has focus. In files focus
+// they fall through, so the cursor must not move there.
+func TestBracketKeysMoveThreadCursorInDiffFocus(t *testing.T) {
+	m := newDetailModel(t)
+	m.detailFocus = focusDiff
+	m.threads = []ado.Thread{
+		{ID: 11, FilePath: "/a.go", Status: "active", Comments: []ado.Comment{{Author: "A", Content: "x"}}},
+		{ID: 22, FilePath: "/a.go", Status: "active", Comments: []ado.Comment{{Author: "A", Content: "y"}}},
+	}
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	m = mm.(Model)
+	if got := m.currentThreadID(); got != 11 {
+		t.Fatalf("] from unset should land on first thread, got %d", got)
+	}
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	m = mm.(Model)
+	if got := m.currentThreadID(); got != 22 {
+		t.Fatalf("] should advance to second, got %d", got)
+	}
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	m = mm.(Model)
+	if got := m.currentThreadID(); got != 11 {
+		t.Fatalf("[ should retreat to first, got %d", got)
+	}
+}
+
+func TestBracketKeysIgnoredInFilesFocus(t *testing.T) {
+	m := newDetailModel(t)
+	// default focus = files
+	m.threads = []ado.Thread{
+		{ID: 11, FilePath: "/a.go", Status: "active", Comments: []ado.Comment{{Author: "A", Content: "x"}}},
+	}
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	m = mm.(Model)
+	if got := m.currentThreadID(); got != 0 {
+		t.Fatalf("] in files focus should not move thread cursor, got %d", got)
 	}
 }
 
