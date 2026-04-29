@@ -167,6 +167,7 @@ func New(cfg config.Config, client *ado.Client) Model {
 		}
 	}
 	if prs, ok := st.LoadRecents(); ok {
+		prs = sortRecentsByStatus(prs)
 		m.list, _ = m.list.Update(prsLoadedMsg{tab: ado.TabRecents, prs: prs})
 	}
 	return m
@@ -228,6 +229,7 @@ func (m Model) loadList(tab ado.Tab) tea.Cmd {
 		if m.cache != nil {
 			prs, _ = m.cache.LoadRecents()
 		}
+		prs = sortRecentsByStatus(prs)
 		return func() tea.Msg {
 			return prsLoadedMsg{tab: ado.TabRecents, prs: prs}
 		}
@@ -712,6 +714,7 @@ func (m Model) openDetail(s ado.PRSummary) (Model, tea.Cmd) {
 			slog.Warn("cache: record visit", "pr", s.ID, "err", err)
 		}
 		if recents, ok := m.cache.LoadRecents(); ok {
+			recents = sortRecentsByStatus(recents)
 			m.list, _ = m.list.Update(prsLoadedMsg{tab: ado.TabRecents, prs: recents})
 		}
 	}
