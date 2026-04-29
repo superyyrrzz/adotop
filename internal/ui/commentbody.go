@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -95,7 +96,9 @@ func glamourRenderer(width int) *glamour.TermRenderer {
 //
 // Pipeline:
 //  1. detect format (html / markdown / plain)
-//  2. HTML → markdown via html-to-markdown
+//  2. HTML → markdown via html-to-markdown, then unmangle (the converter
+//     escapes `[` to `\[` defensively and collapses block-level markdown
+//     newlines inside flow tags like <details>; both defeat glamour)
 //  3. markdown → ANSI via glamour
 //  4. plain → passthrough (still wrapped + indented by the caller)
 //
@@ -110,13 +113,12 @@ func renderCommentBody(raw string, width int, indent string) string {
 	var md string
 	switch detectCommentFormat(raw) {
 	case formatHTML:
-		out, err := htmltomarkdown.ConvertString(raw)
+		pre := promoteEmbeddedMarkdownHeadings(raw)
+		out, err := htmltomarkdown.ConvertString(pre)
 		if err != nil {
-			// Fall back to raw — caller's wrapBodyLines will at least
-			// keep it on the screen.
 			return wrapBodyLines(raw, indent, width)
 		}
-		md = out
+		md = unmangleConvertedMarkdown(out)
 	case formatMarkdown:
 		md = raw
 	default:
@@ -136,6 +138,65 @@ func renderCommentBody(raw string, width int, indent string) string {
 		return wrapBodyLines(md, indent, width)
 	}
 	return indentLines(strings.TrimRight(out, "\n"), indent) + "\n"
+}
+
+// unmangleConvertedMarkdown post-processes html-to-markdown output to
+// undo two failure modes that hurt the GitOps PR Assistant case (and
+// any bot that wraps markdown inside HTML <details> / <span> shells):
+//
+//  1. Escape un-escaping. The converter writes `\[text](url)` whenever
+//     the original text contained a `[` it can't prove was a markdown
+//     link. Bot text contains lots of those (bracketed link text inside
+//     `<small>` etc.). We strip the leading backslash so glamour can
+//     render the link.
+//  2. Block-level newline restoration. The converter flattens markdown
+//     block markers (####, ##### , `- item`) onto a single line when
+//     they were inside an inline-flow HTML tag. Glamour requires those
+//     markers at the start of a line to recognize them. We re-inject
+//     newlines before each `^####+\s` and ` - ` mid-line marker.
+//
+// This is intentionally narrow: the regexes target the exact patterns
+// the converter mangles, not all possible escape/inline patterns.
+func unmangleConvertedMarkdown(s string) string {
+	// Un-escape `\[` / `\]` / `\_` / `\*` that were defensively escaped.
+	s = unescapeRE.ReplaceAllString(s, "$1")
+	// Inject newlines before mid-line `####` and `#####` headings.
+	s = midlineHeadingRE.ReplaceAllString(s, "\n\n$1 ")
+	// Inject newlines before mid-line ` - ` list items so glamour sees
+	// them at column 0 of a fresh line.
+	s = midlineListRE.ReplaceAllString(s, "\n- ")
+	return s
+}
+
+var (
+	unescapeRE       = regexp.MustCompile("\\\\([\\[\\]_*`])")
+	midlineHeadingRE = regexp.MustCompile(` (#{2,6})\s+`)
+	midlineListRE    = regexp.MustCompile(` - `)
+	// embeddedHeadingRE matches a markdown heading marker that lives
+	// inside an HTML body — `\n#### Title\n` (single-newline-terminated,
+	// the way bot authors write it inside <details>). html-to-markdown
+	// would collapse the trailing single newline into a space, fusing
+	// heading text with the following paragraph. We rewrite it to a
+	// real <h4>/<h5>/<h6> tag so the converter emits a proper block.
+	embeddedHeadingRE = regexp.MustCompile(`(?m)^(#{2,6})\s+([^\n]+?)\n`)
+)
+
+// promoteEmbeddedMarkdownHeadings rewrites literal `#### Title\n` markers
+// embedded in an HTML body into `<h4>Title</h4>` tags before the
+// HTML→markdown conversion runs. This preserves the heading boundary
+// that html-to-markdown's whitespace normalization would otherwise lose.
+//
+// Only triggers on lines whose first non-whitespace is `#` followed by a
+// space — too narrow to ever match real prose.
+func promoteEmbeddedMarkdownHeadings(s string) string {
+	return embeddedHeadingRE.ReplaceAllStringFunc(s, func(m string) string {
+		sub := embeddedHeadingRE.FindStringSubmatch(m)
+		level := len(sub[1])
+		if level < 2 || level > 6 {
+			return m
+		}
+		return fmt.Sprintf("<h%d>%s</h%d>\n", level, sub[2], level)
+	})
 }
 
 // indentLines prefixes each line of s with indent. Empty lines also

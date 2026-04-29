@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -118,5 +120,53 @@ func TestSqueezeCommentOneLineStripsMarkdownNoise(t *testing.T) {
 	}
 	if !strings.Contains(out, "Crash") {
 		t.Fatalf("preview lost body text: %q", out)
+	}
+}
+
+// TestRenderCommentBodyGitOpsAssistant uses a real GitOps PR
+// Assistant comment (testdata/gitops_pr_assistant.html) — the case
+// reported on PR #1145743. The comment is HTML wrapping markdown
+// inside a <details> block. Two specific things have to render:
+//  1. Markdown headings inside the <details> (`#### About`,
+//     `#### Skills marketplace`, `##### Example skills:`) must come
+//     out as glamour-styled headings, NOT as literal `####` text.
+//  2. Markdown link text `[aka.ms/prassistant]` must NOT appear as
+//     literal `\[aka.ms/prassistant]` (escaped square bracket) — the
+//     html-to-markdown converter escapes `[` defensively, defeating
+//     glamour's link rendering.
+func TestRenderCommentBodyGitOpsAssistant(t *testing.T) {
+	data, err := os.ReadFile("testdata/gitops_pr_assistant.html")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	out := renderCommentBody(string(data), 100, "      ")
+	plain := stripANSI(out)
+
+	// No leftover escape sequences for `\[`. The links should be
+	// rendered as link text.
+	if strings.Contains(plain, `\[`) {
+		t.Fatalf("escaped \\[ leaked into output:\n%s", plain)
+	}
+	// Headings must be glamour-styled (the dark style keeps `####` as a
+	// visual marker but wraps the whole heading line in ANSI bold+color).
+	// We assert the styled form by looking for the ANSI-stripped heading
+	// text on its own line — glamour separates headings with blank lines,
+	// so `About` should be on a line by itself.
+	if !regexp.MustCompile(`(?m)^\s*#### About\s*$`).MatchString(plain) {
+		t.Fatalf("expected `#### About` on its own line (glamour-rendered heading):\n%s", plain)
+	}
+	if !regexp.MustCompile(`(?m)^\s*#### Skills marketplace\s*$`).MatchString(plain) {
+		t.Fatalf("expected `#### Skills marketplace` on its own line:\n%s", plain)
+	}
+	// And the heading text must be ANSI-styled in the raw output (not
+	// just plain text). Glamour's dark theme uses bold + color 39 for h4.
+	if !strings.Contains(out, "\x1b[38;5;39") {
+		t.Fatalf("expected glamour heading ANSI styling (color 39) in output")
+	}
+	// Sanity: headings' text should still be present.
+	for _, want := range []string{"About", "Skills marketplace", "Example skills"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("rendered output missing %q:\n%s", want, plain)
+		}
 	}
 }
