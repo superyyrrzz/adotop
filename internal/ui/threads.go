@@ -122,11 +122,19 @@ func renderCommentsBlock(threads []ado.Thread, expanded map[int]bool, showResolv
 		}
 	}
 	header := fmt.Sprintf("─ Comments on %s  (%d open", path, len(threads))
-	if hidden > 0 {
-		header += fmt.Sprintf(", %d resolved hidden — press R", hidden)
-	}
 	header += ") "
 	b.WriteString(Faint.Render(header))
+	if hidden > 0 {
+		// Pull the resolved-hidden affordance forward so the user
+		// doesn't miss it in the surrounding faint header. Wait/yellow
+		// reads as "attention" without escalating to error red.
+		hint := fmt.Sprintf(" %d resolved hidden — press R to show ", hidden)
+		b.WriteString(Wait.Bold(true).Render(hint))
+	} else if showResolved {
+		// Mirror affordance: when resolved are visible, remind the user
+		// the toggle is on so they can flip back.
+		b.WriteString(Approve.Render(" showing resolved — press R to hide "))
+	}
 	b.WriteString("\n")
 	if len(threads) == 0 {
 		b.WriteString(Faint.Render("  (no open comments on this file)"))
