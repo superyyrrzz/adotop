@@ -1096,6 +1096,10 @@ func (m Model) View() string {
 			"  v           open vote menu: a/s/w/r/c (Detail)",
 			"  X           abandon PR (Detail, confirms)",
 			"  enter       expand comment threads on focused file (Diff focus)",
+			"  [ / ]       prev / next thread (Diff focus)",
+			"  c           compose new PR-level comment via $EDITOR (Diff focus)",
+			"  C           reply to selected thread via $EDITOR (Diff focus)",
+			"  x           toggle resolve/reactivate selected thread (Diff focus)",
 			"  R           toggle showing resolved comments",
 			"  esc         back",
 		}, "\n"))
