@@ -355,6 +355,22 @@ func (m Model) persistDetailField(mutate func(snap *cache.DetailSnapshot)) {
 	}
 }
 
+// loadThreadsOnly refreshes only the threads slice for the active PR.
+// Used after thread/comment writes so the UI reflects the new state
+// without paying for the four-endpoint fetch that loadDetail does.
+func (m Model) loadThreadsOnly(s ado.PRSummary) tea.Cmd {
+	if s.RepoID == "" || s.ID == 0 {
+		return nil
+	}
+	client := m.client
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		threads, err := client.GetPullRequestThreads(ctx, s.RepoID, s.ID)
+		return threadsLoadedMsg{threads: threads, err: err}
+	}
+}
+
 // maybeDropTerminalCache removes the cached snapshot when the PR has
 // transitioned to a terminal state (completed/abandoned). Those PRs
 // don't change again, so the disk slot is better spent on active ones.
@@ -624,6 +640,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		slog.Info("action succeeded", "kind", msg.kind, "pr", msg.prID, "notes", msg.notes)
 		m.footerOK = fmt.Sprintf("PR #%d %s", msg.prID, msg.notes)
+		// Thread-scoped writes only need the threads list refreshed; pay
+		// for one fetch instead of the four-endpoint full refresh that
+		// vote/abandon trigger. List rows don't reflect thread state, so
+		// we skip loadList too.
+		switch msg.kind {
+		case "resolveThread", "reactivateThread", "postThread", "postComment":
+			if m.screen == screenDetail && m.detail.Summary().ID == msg.prID {
+				return m, m.loadThreadsOnly(m.detail.Summary())
+			}
+			return m, nil
+		}
 		// Optimistic local update for votes: ADO sometimes echoes the
 		// reviewer back under a different identity descriptor (group vs
 		// user) so the GET-side `rv.ID == myID` match misses and the
@@ -855,6 +882,11 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.moveThreadCursor(-1)
 		m = m.refreshPreview()
 		return m, nil
+	case keyMatches(msg, m.keys.ToggleResolve):
+		if m.detailFocus != focusDiff {
+			return m, nil
+		}
+		return m, m.toggleResolveCurrentThread()
 	case keyMatches(msg, m.keys.WrapDiff):
 		// Soft-wrap toggle for the diff preview. Off by default so
 		// large diffs stay scannable; on for files with long lines.

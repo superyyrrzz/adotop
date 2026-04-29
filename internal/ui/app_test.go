@@ -427,6 +427,51 @@ func TestBracketKeysIgnoredInFilesFocus(t *testing.T) {
 	}
 }
 
+// x with a thread selected dispatches a tea.Cmd. We can't actually run
+// it (would call ADO), but we verify the dispatch shape: cmd != nil and
+// the actionDoneMsg success branch sets footerOK with the right note.
+func TestResolveKeyDispatchesPatchCmd(t *testing.T) {
+	m := newDetailModel(t)
+	// newDetailModel creates the summary first then loads files; we need
+	// to update the summary in place so RepoID is set without resetting
+	// files (SetSummary wipes files). Re-run filesLoadedMsg after setting
+	// summary to keep the model usable.
+	d := m.detail.SetSummary(ado.PRSummary{ID: 1, RepoID: "r", Title: "x"})
+	d, _ = d.Update(filesLoadedMsg{files: []ado.FileChange{
+		{Path: "/a.go", ChangeType: "edit"},
+	}})
+	m.detail = d
+	m.detailFocus = focusDiff
+	m.threads = []ado.Thread{
+		{ID: 11, FilePath: "/a.go", Status: "active", Comments: []ado.Comment{{Author: "A", Content: "x"}}},
+	}
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	m = mm.(Model)
+	if got := m.currentThreadID(); got != 11 {
+		t.Fatalf("setup: expected cursor on thread 11 after ], got %d", got)
+	}
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatalf("x on selected active thread should return a tea.Cmd")
+	}
+	mm, _ = m.Update(actionDoneMsg{kind: "resolveThread", prID: 1, notes: "thread #11 resolved"})
+	m = mm.(Model)
+	if m.footerOK == "" || !strings.Contains(m.footerOK, "resolved") {
+		t.Fatalf("expected success footer for resolve, got %q", m.footerOK)
+	}
+}
+
+func TestResolveKeyNoopWhenNoThreadSelected(t *testing.T) {
+	m := newDetailModel(t)
+	m.detailFocus = focusDiff
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	_ = mm.(Model)
+	if cmd != nil {
+		t.Fatalf("x with no selected thread should be a no-op, got cmd")
+	}
+}
+
 func TestQuitKeyOnListQuits(t *testing.T) {
 	m := newTestModel()
 	m.screen = screenList
