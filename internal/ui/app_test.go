@@ -472,6 +472,80 @@ func TestResolveKeyNoopWhenNoThreadSelected(t *testing.T) {
 	}
 }
 
+// c launches the editor (returns a tea.Cmd) when diff focus is set.
+// We can't actually run the editor in tests, but the dispatch contract
+// is observable.
+func TestComposeKeyEnqueuesEditorCmd(t *testing.T) {
+	m := newDetailModel(t)
+	m.detailFocus = focusDiff
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	_ = mm.(Model)
+	if cmd == nil {
+		t.Fatalf("c should return a tea.Cmd to launch editor")
+	}
+}
+
+func TestComposeKeyIgnoredInFilesFocus(t *testing.T) {
+	m := newDetailModel(t)
+	// default focus = files
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	_ = mm.(Model)
+	if cmd != nil {
+		t.Fatalf("c in files focus should be a no-op, got cmd")
+	}
+}
+
+// The success footer for postThread / postComment lands the same way as
+// vote/abandon — through actionDoneMsg → footerOK. This confirms the
+// kind→notes path is wired so the user gets a confirmation banner.
+func TestPostThreadResultUpdatesFooter(t *testing.T) {
+	m := newDetailModel(t)
+	mm, _ := m.Update(actionDoneMsg{kind: "postThread", prID: 1, notes: "comment posted"})
+	m = mm.(Model)
+	if !strings.Contains(m.footerOK, "comment posted") {
+		t.Fatalf("expected footerOK with notes, got %q", m.footerOK)
+	}
+}
+
+// C with a thread selected returns a tea.Cmd; with no selection it's a
+// no-op. The reply path's distinguishing feature is that the dispatched
+// composeResultMsg carries targetThreadID > 0, but that's an internal
+// detail — the public contract here is "C dispatches when something
+// is selected, doesn't otherwise".
+func TestReplyKeyComposesAgainstSelectedThread(t *testing.T) {
+	m := newDetailModel(t)
+	m.detailFocus = focusDiff
+	m.threads = []ado.Thread{
+		{ID: 11, FilePath: "/a.go", Status: "active", Comments: []ado.Comment{{Author: "A", Content: "x"}}},
+	}
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	m = mm.(Model)
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	_ = mm.(Model)
+	if cmd == nil {
+		t.Fatalf("C with thread selected should return a tea.Cmd")
+	}
+}
+
+func TestReplyKeyNoopWhenNoThreadSelected(t *testing.T) {
+	m := newDetailModel(t)
+	m.detailFocus = focusDiff
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	_ = mm.(Model)
+	if cmd != nil {
+		t.Fatalf("C with no thread selected should be no-op")
+	}
+}
+
+func TestPostCommentResultUpdatesFooter(t *testing.T) {
+	m := newDetailModel(t)
+	mm, _ := m.Update(actionDoneMsg{kind: "postComment", prID: 1, notes: "reply posted"})
+	m = mm.(Model)
+	if !strings.Contains(m.footerOK, "reply posted") {
+		t.Fatalf("expected reply footer, got %q", m.footerOK)
+	}
+}
+
 func TestQuitKeyOnListQuits(t *testing.T) {
 	m := newTestModel()
 	m.screen = screenList

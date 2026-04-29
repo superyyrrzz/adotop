@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -99,6 +101,120 @@ func (m Model) toggleResolveCurrentThread() tea.Cmd {
 		defer cancel()
 		err := client.PatchThreadStatus(ctx, repoID, prID, tid, target)
 		return actionDoneMsg{kind: kind, prID: prID, err: err, notes: notes}
+	}
+}
+
+// composeResultMsg is dispatched after the user closes their $EDITOR.
+// body is the trimmed editor output — empty means the user cancelled.
+// targetThreadID is 0 for new PR-level threads, non-zero for replies.
+// tmpPath is the temp file the editor wrote to; the result handler is
+// responsible for cleaning it up.
+type composeResultMsg struct {
+	body           string
+	targetThreadID int
+	tmpPath        string
+	err            error
+}
+
+// composeNewThreadCmd seeds a temp file, suspends the TUI via
+// tea.ExecProcess, and returns a composeResultMsg with the edited
+// body when the editor exits. targetThreadID==0 marks this as a new
+// thread (vs. reply) so the result handler routes to PostPRThread.
+func (m Model) composeNewThreadCmd() tea.Cmd {
+	seed := "<!-- Comment will be posted as a new PR-level thread. Save empty to cancel. -->\n\n"
+	tmpPath, err := writeSeedFile(seed)
+	if err != nil {
+		return func() tea.Msg { return composeResultMsg{err: err} }
+	}
+	cmd, err := buildEditorCmd(resolveEditor(), tmpPath)
+	if err != nil {
+		os.Remove(tmpPath)
+		return func() tea.Msg { return composeResultMsg{err: err} }
+	}
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		if err != nil {
+			os.Remove(tmpPath)
+			return composeResultMsg{err: err}
+		}
+		b, readErr := os.ReadFile(tmpPath)
+		if readErr != nil {
+			os.Remove(tmpPath)
+			return composeResultMsg{err: readErr}
+		}
+		return composeResultMsg{body: trimSeedAndComments(string(b)), tmpPath: tmpPath}
+	})
+}
+
+// postNewThreadCmd POSTs a new PR-level thread. Returns nil for empty
+// bodies so cancelled compose sessions don't pester ADO.
+func (m Model) postNewThreadCmd(body string) tea.Cmd {
+	if strings.TrimSpace(body) == "" {
+		return nil
+	}
+	repoID := m.detail.Summary().RepoID
+	prID := m.detail.Summary().ID
+	if repoID == "" || prID == 0 {
+		return nil
+	}
+	client := m.client
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, err := client.PostPRThread(ctx, repoID, prID, body, "")
+		return actionDoneMsg{kind: "postThread", prID: prID, err: err, notes: "comment posted"}
+	}
+}
+
+// composeReplyCmd seeds the editor with a reply hint and returns a
+// composeResultMsg with targetThreadID set so the result handler routes
+// to PostThreadComment instead of PostPRThread.
+func (m Model) composeReplyCmd() tea.Cmd {
+	tid := m.currentThreadID()
+	if tid == 0 {
+		return nil
+	}
+	seed := fmt.Sprintf("<!-- Reply to thread #%d. Save empty to cancel. -->\n\n", tid)
+	tmpPath, err := writeSeedFile(seed)
+	if err != nil {
+		return func() tea.Msg { return composeResultMsg{targetThreadID: tid, err: err} }
+	}
+	cmd, err := buildEditorCmd(resolveEditor(), tmpPath)
+	if err != nil {
+		os.Remove(tmpPath)
+		return func() tea.Msg { return composeResultMsg{targetThreadID: tid, err: err} }
+	}
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		if err != nil {
+			os.Remove(tmpPath)
+			return composeResultMsg{targetThreadID: tid, err: err}
+		}
+		b, readErr := os.ReadFile(tmpPath)
+		if readErr != nil {
+			os.Remove(tmpPath)
+			return composeResultMsg{targetThreadID: tid, err: readErr}
+		}
+		return composeResultMsg{body: trimSeedAndComments(string(b)), targetThreadID: tid, tmpPath: tmpPath}
+	})
+}
+
+// postReplyCmd POSTs a reply to the given thread. Mirrors
+// postNewThreadCmd in shape; the kind tag in actionDoneMsg lets the
+// handler distinguish them in the success footer.
+func (m Model) postReplyCmd(threadID int, body string) tea.Cmd {
+	if strings.TrimSpace(body) == "" || threadID == 0 {
+		return nil
+	}
+	repoID := m.detail.Summary().RepoID
+	prID := m.detail.Summary().ID
+	if repoID == "" || prID == 0 {
+		return nil
+	}
+	client := m.client
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, err := client.PostThreadComment(ctx, repoID, prID, threadID, body)
+		return actionDoneMsg{kind: "postComment", prID: prID, err: err, notes: fmt.Sprintf("reply posted to #%d", threadID)}
 	}
 }
 

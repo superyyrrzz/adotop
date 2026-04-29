@@ -627,6 +627,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.openDetail(msg.summary)
+	case composeResultMsg:
+		if msg.tmpPath != "" {
+			os.Remove(msg.tmpPath)
+		}
+		if msg.err != nil {
+			m.footerErr = "compose: " + msg.err.Error()
+			return m, nil
+		}
+		if strings.TrimSpace(msg.body) == "" {
+			// Empty == cancelled; quiet no-op.
+			return m, nil
+		}
+		if msg.targetThreadID != 0 {
+			return m, m.postReplyCmd(msg.targetThreadID, msg.body)
+		}
+		return m, m.postNewThreadCmd(msg.body)
 	case actionDoneMsg:
 		if msg.err != nil {
 			// File-only log: the footer banner is transient so an
@@ -887,6 +903,16 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.toggleResolveCurrentThread()
+	case keyMatches(msg, m.keys.ComposeThread):
+		if m.detailFocus != focusDiff {
+			return m, nil
+		}
+		return m, m.composeNewThreadCmd()
+	case keyMatches(msg, m.keys.ReplyThread):
+		if m.detailFocus != focusDiff {
+			return m, nil
+		}
+		return m, m.composeReplyCmd()
 	case keyMatches(msg, m.keys.WrapDiff):
 		// Soft-wrap toggle for the diff preview. Off by default so
 		// large diffs stay scannable; on for files with long lines.
