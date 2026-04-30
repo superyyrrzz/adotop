@@ -182,8 +182,16 @@ func hintSegments(m Model) []segment {
 	case screenList:
 		hints = []string{"/:filter", "#:goto", "enter:open", "o:browser", "r:refresh", "tab:next", "?:help", "q:quit"}
 	case screenDetail:
-		base := []string{"tab:focus", "enter:diff/expand", "n/N:file", "gg/G:top/end", "R:show-resolved",
-			"a:approve", "v:vote", "X:abandon", "o:browser", "r:refresh", wrapHint(m), "+/-:context", "?:help", "esc:back"}
+		// Comment-action hints are diff-focus-only — they don't apply
+		// (and the keys are no-ops) when the file list has focus, so
+		// showing them there is just clutter that costs us bar width.
+		// Placed right after R:show-resolved so the comment-domain hints
+		// cluster together and read as a related group.
+		base := []string{"tab:focus", "enter:diff/expand", "n/N:file", "gg/G:top/end", "R:show-resolved"}
+		if m.detailFocus == focusDiff {
+			base = append(base, "[/]:thread", "c:new", "C:reply", "x:resolve")
+		}
+		base = append(base, "a:approve", "v:vote", "X:abandon", "o:browser", "r:refresh", wrapHint(m), "+/-:context", "?:help", "esc:back")
 		hints = base
 	}
 	out := make([]segment, 0, len(hints))
