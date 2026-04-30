@@ -174,3 +174,42 @@ func TestRenderCommentBodyGitOpsAssistant(t *testing.T) {
 		}
 	}
 }
+
+// TestSanitizeCommentStripsGitOpsRateThis: GitOps PR Assistant comments
+// trail off with a "Rate this:" feedback table. The block is most of
+// the rendered height for zero signal, so for GitOps authors we cut
+// from the marker (and any wrapping HTML tag) onwards.
+func TestSanitizeCommentStripsGitOpsRateThis(t *testing.T) {
+	in := `<p>About: this PR was reviewed by the assistant.</p><table><tr><td><p>Rate this:</p></td><td>★★★★★</td></tr></table>`
+	out := sanitizeComment("GitOps PR Assistant", in)
+	if strings.Contains(strings.ToLower(out), "rate this") {
+		t.Fatalf("expected Rate this tail removed:\n%s", out)
+	}
+	if !strings.Contains(out, "About: this PR was reviewed by the assistant.") {
+		t.Fatalf("body content was lost:\n%s", out)
+	}
+}
+
+// TestSanitizeCommentLeavesHumanCommentsAlone: a real reviewer who
+// happens to write "Please rate this:" must NOT lose their content.
+// The strip is author-gated by isGitOpsAuthor for exactly this reason.
+func TestSanitizeCommentLeavesHumanCommentsAlone(t *testing.T) {
+	in := "Please rate this: how confident are you in the rollout plan?"
+	out := sanitizeComment("Alice Reviewer", in)
+	if out != in {
+		t.Fatalf("human comment was modified — got %q, want %q", out, in)
+	}
+}
+
+// TestSanitizeCommentMatchesGitOpsVariants: the bot's display name
+// varies by org ("GitOps", "GitOps PR Assistant", "gitops-bot", etc.).
+// The classifier is prefix + case-insensitive so all of those still hit
+// the strip path.
+func TestSanitizeCommentMatchesGitOpsVariants(t *testing.T) {
+	for _, name := range []string{"GitOps", "GitOps PR Assistant", "gitops-bot", "  GitOps  "} {
+		out := sanitizeComment(name, "body\nRate this: yes")
+		if strings.Contains(strings.ToLower(out), "rate this") {
+			t.Fatalf("author %q should match GitOps strip path:\n%s", name, out)
+		}
+	}
+}

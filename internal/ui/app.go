@@ -1368,6 +1368,14 @@ func (m Model) previewPaneTitle() string {
 // previewPaneBody is what goes inside the bordered preview pane. No
 // title prefix — the border carries that — just the diff viewport, or
 // a placeholder when no file is loaded.
+//
+// When the selected file has a sticky resolved-comments hint to show
+// (resolved comments hidden, OR the show-resolved toggle is on), the
+// hint is spliced over the row that will become the pane's bottom row
+// after borderedPane's fit pass. That index — `innerH-1`, where
+// innerH = bodyHeight - paneChromeHeight — is the last visible body
+// row the user actually sees, so the band stays sticky regardless of
+// scroll position.
 func (m Model) previewPaneBody() string {
 	if m.preview.file == "" {
 		if _, ok := m.detail.SelectedFile(); !ok {
@@ -1375,7 +1383,95 @@ func (m Model) previewPaneBody() string {
 		}
 		return Faint.Render("Loading selected file diff…")
 	}
-	return m.preview.View()
+	body := m.preview.View()
+	band := m.stickyResolvedBand()
+	if band == "" {
+		return body
+	}
+	layout := m.detailLayout()
+	bodyH := layout.bodyHeight
+	if !layout.split {
+		bodyH = maxInt(6, layout.bodyHeight/2)
+	}
+	innerH := bodyH - paneChromeHeight
+	if innerH <= 0 {
+		return body
+	}
+	return spliceAtIndex(body, innerH-1, band)
+}
+
+// stickyResolvedBand returns a one-line affordance to splice at the
+// bottom of the diff pane. Empty when there's nothing worth showing —
+// no selected file, or no resolved comments on it.
+//
+// The band is intentionally NOT suppressed when the viewport is at the
+// bottom: short diffs hit AtBottom on first render (maxYOffset==0) and
+// would silently lose the affordance, which is the whole point of the
+// sticky band. A small duplicate with the in-flow comments header is
+// the lesser evil.
+func (m Model) stickyResolvedBand() string {
+	f, ok := m.detail.SelectedFile()
+	if !ok {
+		return ""
+	}
+	hidden := 0
+	for _, t := range m.threads {
+		if t.FilePath == f.Path && t.IsResolved() {
+			hidden++
+		}
+	}
+	width := m.preview.vp.Width
+	if width <= 0 {
+		return ""
+	}
+	switch {
+	case !m.showResolved && hidden > 0:
+		label := fmt.Sprintf(" ▾ %d resolved comment", hidden)
+		if hidden != 1 {
+			label += "s"
+		}
+		label += " on this file — R to show "
+		return padBandToWidth(Wait.Bold(true).Render(label), width)
+	case m.showResolved && hidden > 0:
+		return padBandToWidth(Approve.Render(" ▾ showing resolved — R to hide "), width)
+	}
+	return ""
+}
+
+// hasAnyResolvedForFile is the predicate behind the show-resolved
+// mirror band — the band only makes sense when the file actually has
+// resolved threads to look at.
+func hasAnyResolvedForFile(all []ado.Thread, path string) bool {
+	for _, t := range all {
+		if t.FilePath == path && t.IsResolved() {
+			return true
+		}
+	}
+	return false
+}
+
+// padBandToWidth right-pads a styled band string with spaces so the
+// chip sits flush left and the rest of the row is blank — keeps the
+// band feeling like the bottom edge of the pane.
+func padBandToWidth(band string, width int) string {
+	used := lipgloss.Width(band)
+	if used >= width {
+		return band
+	}
+	return band + strings.Repeat(" ", width-used)
+}
+
+// spliceAtIndex replaces the line at idx in body with replacement.
+// If body has fewer than idx+1 lines it is padded with empty rows so
+// the replacement still lands at idx — needed because borderedPane's
+// fit pass would otherwise pad AFTER the band and push it up.
+func spliceAtIndex(body string, idx int, replacement string) string {
+	lines := strings.Split(body, "\n")
+	for len(lines) <= idx {
+		lines = append(lines, "")
+	}
+	lines[idx] = replacement
+	return strings.Join(lines, "\n")
 }
 
 // previewPaneView is retained as a thin shim for any caller that still

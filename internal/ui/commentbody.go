@@ -256,6 +256,38 @@ func squeezeCommentOneLine(raw string, max int) string {
 	return squeezeOneLine(raw, max)
 }
 
+// botRateThisRE matches the GitOps PR Assistant's "Rate this:" feedback
+// block tail. The marker can appear inside a `<p>` or as plain text;
+// case-insensitive `(?is)` lets `.` cross newlines so we sweep the rest
+// of the body. The leading group greedily consumes any HTML tag opening
+// preceding the marker so we don't leave a dangling `<td><p>` shell.
+var botRateThisRE = regexp.MustCompile(`(?is)\s*(<[^>]*>\s*)*rate\s+this\s*:.*$`)
+
+// sanitizeComment trims well-known boilerplate from bot comments before
+// they reach the renderer. Today the only entry is GitOps PR Assistant's
+// "Rate this:" feedback block — a long HTML table of star buttons that
+// occupies most of the comment height with zero signal.
+//
+// Author-gated rather than content-gated so a human review that happens
+// to say "please rate this:" survives unchanged. Returns the input as-is
+// for non-bot authors.
+func sanitizeComment(author, content string) string {
+	if !isGitOpsAuthor(author) {
+		return content
+	}
+	return strings.TrimRightFunc(botRateThisRE.ReplaceAllString(content, ""), func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	})
+}
+
+// isGitOpsAuthor classifies a comment author as the GitOps PR Assistant
+// bot. Match is case-insensitive and prefix-based — the bot's display
+// name varies slightly across orgs ("GitOps", "GitOps PR Assistant",
+// etc.) but always starts with "GitOps".
+func isGitOpsAuthor(author string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(author)), "gitops")
+}
+
 // stripMarkdownNoise removes the syntactic punctuation that's only
 // useful when rendered (`**`, leading `#`, list bullets, fence ticks).
 // We're aiming for a readable ~140-char preview — a soup of asterisks

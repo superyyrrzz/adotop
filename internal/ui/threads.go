@@ -270,7 +270,7 @@ func renderThread(t ado.Thread, expand bool, width int) string {
 
 	if !expand {
 		head := fmt.Sprintf("  %s %s  %s: %s",
-			bullet, Faint.Render(loc), Header.Render(first.Author), squeezeCommentOneLine(first.Content, 200))
+			bullet, Faint.Render(loc), Header.Render(first.Author), squeezeCommentOneLine(sanitizeComment(first.Author, first.Content), 200))
 		if t.IsResolved() {
 			head = Faint.Render(head)
 		}
@@ -313,10 +313,10 @@ func renderThread(t ado.Thread, expand bool, width int) string {
 	}
 	b.WriteString(head)
 	b.WriteString("\n")
-	b.WriteString(renderCommentBody(first.Content, width, bodyIndent))
+	b.WriteString(renderCommentBody(sanitizeComment(first.Author, first.Content), width, bodyIndent))
 	for _, c := range t.Comments[1:] {
 		b.WriteString(fmt.Sprintf("  ↳ %s:\n", Header.Render(c.Author)))
-		b.WriteString(renderCommentBody(c.Content, width, bodyIndent))
+		b.WriteString(renderCommentBody(sanitizeComment(c.Author, c.Content), width, bodyIndent))
 	}
 	return b.String()
 }
@@ -439,7 +439,7 @@ func renderPRDiscussion(threads []ado.Thread) string {
 		line := fmt.Sprintf("  %s %s: %s",
 			bullet,
 			Header.Render(first.Author),
-			squeezeCommentOneLine(first.Content, 140))
+			squeezeCommentOneLine(sanitizeComment(first.Author, first.Content), 140))
 		if len(t.Comments) > 1 {
 			line += Faint.Render(fmt.Sprintf("  [%d more]", len(t.Comments)-1))
 		}
