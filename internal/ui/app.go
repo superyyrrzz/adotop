@@ -122,6 +122,10 @@ type Model struct {
 	// loadingFrame is the current spinner frame index, advanced by
 	// loadingTickMsg every ~100ms while the modal is up.
 	loadingFrame int
+
+	// descModal holds the scrollable PR-description overlay state.
+	// nil == closed. Populated by D in detail screen.
+	descModal *descModalState
 }
 
 // pendingAction is a destructive operation awaiting y/n confirmation.
@@ -686,6 +690,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.loadList(m.list.Tab()))
 		return m, tea.Batch(cmds...)
 	case tea.KeyMsg:
+		// Modal overlays trap keys before any screen handler sees
+		// them, so j/k inside the description scroll the modal
+		// instead of the file list, and esc closes the modal
+		// instead of leaving the PR.
+		if m.descModalOpen() {
+			mm, cmd := m.updateDescModal(msg)
+			return mm, cmd
+		}
 		// Confirmation prompt swallows all keys until resolved.
 		if m.pendingAction.kind != "" {
 			if keyMatches(msg, m.keys.ConfirmYes) {
@@ -878,6 +890,13 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyMatches(msg, m.keys.VoteMenu):
 		// Open the vote overlay; next key picks the vote (a/s/w/r/c/esc).
 		m.voteMenu = true
+		return m, nil
+	case keyMatches(msg, m.keys.DescModal):
+		// D opens the full description in a scrollable modal so the
+		// user can read past the inline cap without leaving the TUI.
+		// No-op when the description is empty (openDescModal returns
+		// the model unchanged).
+		m = m.openDescModal()
 		return m, nil
 	case keyMatches(msg, m.keys.ShowResolved):
 		m.showResolved = !m.showResolved
@@ -1093,6 +1112,13 @@ func (m Model) View() string {
 		}
 		body = overlayLoadingModal(body, m.loadingPRModal, m.loadingFrame, m.width, bodyH)
 	}
+	if m.descModalOpen() {
+		bodyH := m.height - lipgloss.Height(header) - lipgloss.Height(footer) - 2
+		if bodyH < 3 {
+			bodyH = 24
+		}
+		body = overlayBox(body, m.renderDescModal(), m.width, bodyH)
+	}
 	if m.showHelp {
 		body = HelpBox.Render(strings.Join([]string{
 			"Help",
@@ -1116,6 +1142,7 @@ func (m Model) View() string {
 			"  C           reply to selected thread via $EDITOR (Diff focus)",
 			"  x           toggle resolve/reactivate selected thread (Diff focus)",
 			"  R           toggle showing resolved comments",
+			"  D           open full PR description in scrollable modal",
 			"  esc         back",
 		}, "\n"))
 	}

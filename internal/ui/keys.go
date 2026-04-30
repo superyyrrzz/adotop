@@ -25,6 +25,7 @@ type KeyMap struct {
 	ToggleResolve          key.Binding
 	ComposeThread          key.Binding
 	ReplyThread            key.Binding
+	DescModal              key.Binding
 }
 
 func DefaultKeys() KeyMap {
@@ -62,5 +63,6 @@ func DefaultKeys() KeyMap {
 		ToggleResolve: key.NewBinding(key.WithKeys("x")),
 		ComposeThread: key.NewBinding(key.WithKeys("c")),
 		ReplyThread:   key.NewBinding(key.WithKeys("C")),
+		DescModal:     key.NewBinding(key.WithKeys("D")),
 	}
 }
