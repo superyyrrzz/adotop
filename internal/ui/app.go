@@ -883,6 +883,21 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showResolved = !m.showResolved
 		m.detail = m.detail.SetPRThreads(m.threads, m.showResolved)
 		m = m.refreshPreview()
+		// On the SHOW direction, treat R as "I want to read these":
+		// expand all threads on the focused file AND scroll to them.
+		// Saves the user a redundant Enter + PageDown after every R.
+		// Expand BEFORE the second refresh so the rebuilt viewport
+		// reflects the expanded state, then jump the offset past the
+		// max — viewport.SetYOffset clamps to maxYOffset so we land
+		// at the tail (where the comments live) regardless of body
+		// height.
+		if m.showResolved {
+			if f, ok := m.detail.SelectedFile(); ok {
+				m, _ = m.expandThreadsForFile(f.Path)
+			}
+			m = m.refreshPreview()
+			m.preview.vp.SetYOffset(1 << 30)
+		}
 		return m, nil
 	case keyMatches(msg, m.keys.NextThread):
 		if m.detailFocus != focusDiff {

@@ -441,7 +441,14 @@ func (m DetailModel) renderHeader(focused bool) string {
 	if m.detail != nil {
 		desc := strings.TrimSpace(m.detail.DescriptionMD)
 		if desc != "" {
-			lines := wrapLines(strings.Split(desc, "\n"), m.effectiveWidth())
+			// Run the description through the same HTML/markdown
+			// pipeline the comments use so embedded headings, lists,
+			// links, and code blocks render instead of leaking raw
+			// syntax. Width = effectiveWidth so glamour wraps to the
+			// pane; indent = "" so we don't push everything right.
+			rendered := renderCommentBody(desc, m.effectiveWidth(), "")
+			rendered = strings.TrimRight(rendered, "\n")
+			lines := strings.Split(rendered, "\n")
 			descCap := m.descCap()
 			if len(lines) > descCap {
 				lines = append(lines[:descCap], Faint.Render(fmt.Sprintf("… (%d more lines)", len(lines)-descCap)))

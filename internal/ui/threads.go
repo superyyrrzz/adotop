@@ -26,6 +26,22 @@ func (m Model) threadsForFile(path string) []ado.Thread {
 	return out
 }
 
+// expandThreadsForFile unconditionally expands every visible thread on
+// the given file. Returns true when at least one thread was visible
+// (so the caller knows there's something worth scrolling to). Used by
+// R-show: when the user reveals resolved comments, they want to see
+// the details, not have to press Enter again to expand.
+func (m Model) expandThreadsForFile(path string) (Model, bool) {
+	threads := m.threadsForFile(path)
+	if len(threads) == 0 {
+		return m, false
+	}
+	for _, t := range threads {
+		m.expandedThread[t.ID] = true
+	}
+	return m, true
+}
+
 // toggleThreadsForFile flips the expand state of every visible thread on
 // the given file. If any thread is currently collapsed, this expands all of
 // them; otherwise collapses all. Returns the new model and a bool that's
@@ -83,9 +99,10 @@ func (m Model) refreshPreview() Model {
 	return m
 }
 
-// scrollPreviewToComments puts the start of the comments block at the
-// top of the viewport. Used after Enter expands threads so the user
-// doesn't have to scroll past the diff to find what they just opened.
+// scrollPreviewToComments puts the preview viewport at the start of the
+// comments block — used after Enter expands a thread, and after R reveals
+// resolved threads, so the user doesn't have to scroll past the diff to
+// find what they just opened.
 //
 // The diff body and the comments block are concatenated into a single
 // viewport string; the comments start at line `lipgloss.Height(body)`.
