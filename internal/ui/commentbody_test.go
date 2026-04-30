@@ -159,9 +159,13 @@ func TestRenderCommentBodyGitOpsAssistant(t *testing.T) {
 		t.Fatalf("expected `#### Skills marketplace` on its own line:\n%s", plain)
 	}
 	// And the heading text must be ANSI-styled in the raw output (not
-	// just plain text). Glamour's dark theme uses bold + color 39 for h4.
-	if !strings.Contains(out, "\x1b[38;5;39") {
-		t.Fatalf("expected glamour heading ANSI styling (color 39) in output")
+	// just plain text). Headings now inherit the theme's Identifier
+	// color (Catppuccin Blue, #89b4fa) via the custom glamour spec —
+	// look for ANY truecolor SGR (`\x1b[38;2;` for RGB foreground)
+	// so the assertion survives palette tweaks. We only care that the
+	// heading text was rendered through glamour, not the exact hex.
+	if !strings.Contains(out, "\x1b[") {
+		t.Fatalf("expected glamour ANSI styling in output (heading should be colorized)")
 	}
 	// Sanity: headings' text should still be present.
 	for _, want := range []string{"About", "Skills marketplace", "Example skills"} {

@@ -1369,8 +1369,12 @@ type previewLayout struct {
 }
 
 func (m Model) detailLayout() previewLayout {
+	// Chrome: topbar bar + topbar rule + blank + blank + footer = 5 lines.
+	// Underestimating this pushes the topbar's first row off the top of
+	// the alt-screen, which is how "the bar disappears" manifests on the
+	// detail screen.
 	layout := previewLayout{
-		bodyHeight: maxInt(10, m.height-4),
+		bodyHeight: maxInt(10, m.height-5),
 		leftWidth:  80,
 		rightWidth: 80,
 	}

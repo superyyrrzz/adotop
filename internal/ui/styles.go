@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/superyyrrzz/adotop/internal/ui/theme"
@@ -76,8 +77,15 @@ func applyStyles(t theme.Theme) {
 	PillNeutral = s.PillNeutral
 	PillDone = s.PillDone
 
-	// Glamour reads its style from a package var (not Styles) because
+	// Glamour reads its style from package vars (not Styles) because
 	// the renderer is constructed lazily inside commentbody.go's cache.
-	// Update it here so a theme switch propagates to subsequent renders.
+	// Update them here so a theme switch propagates to subsequent
+	// renders. Bust the cache too — keys include the style name, but
+	// the spec bytes can change without the name changing (e.g. a
+	// theme tweak), so the safest move is a full clear.
+	glamourMu.Lock()
 	glamourStyleName = t.GlamourStyle
+	glamourStyleSpec = glamourStyleJSON(t)
+	glamourCache = map[glamourCacheKey]*glamour.TermRenderer{}
+	glamourMu.Unlock()
 }

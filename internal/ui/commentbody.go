@@ -61,14 +61,18 @@ func detectCommentFormat(s string) commentFormat {
 // are cheap. The detail viewport width changes only on terminal resize,
 // so this cache is bounded in practice to a handful of entries.
 //
-// glamourStyleName is the active glamour style ("dark"/"light") set by
-// applyStyles from the theme. The cache key includes it so a theme
-// switch mid-session (rare, but possible) doesn't serve a stale
-// renderer with the old style.
+// glamourStyleName is the active glamour fallback style ("dark"/"light")
+// set by applyStyles from the theme. glamourStyleSpec, when non-nil,
+// is a custom JSON style spec derived from the active theme — it
+// overrides glamourStyleName so that headings, code blocks, and links
+// pick up the same palette as the chrome around them. The cache key
+// includes the style name so a theme switch mid-session doesn't serve
+// a stale renderer.
 var (
 	glamourMu        sync.Mutex
 	glamourCache     = map[glamourCacheKey]*glamour.TermRenderer{}
 	glamourStyleName = "dark"
+	glamourStyleSpec []byte
 )
 
 type glamourCacheKey struct {
@@ -83,20 +87,27 @@ func glamourRenderer(width int) *glamour.TermRenderer {
 	glamourMu.Lock()
 	defer glamourMu.Unlock()
 	style := glamourStyleName
+	spec := glamourStyleSpec
 	key := glamourCacheKey{width: width, style: style}
 	if r, ok := glamourCache[key]; ok {
 		return r
 	}
-	// glamour's WithAutoStyle picks "dark"/"light"/"notty" from the
-	// surrounding terminal. The "notty" path (used in tests and pipes)
-	// strips emphasis, which makes the Markdown render-loop look like
-	// a no-op for `**bold**`. Force the style explicitly so emphasis is
-	// always applied, and so light-theme users get a light-styled
-	// markdown render that doesn't blast Mocha colors onto Latte.
-	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(style),
-		glamour.WithWordWrap(width),
-	)
+	// Prefer the theme-derived custom spec when available so PR
+	// descriptions and comments use the same Identifier/Accent
+	// palette as the rest of the UI. Fall back to glamour's standard
+	// dark/light style when no spec is wired (early init, tests).
+	//
+	// Forcing an explicit style — rather than WithAutoStyle — keeps
+	// emphasis applied even on the "notty" code path used by tests
+	// and pipes; AutoStyle would strip `**bold**` to plain text.
+	var opts []glamour.TermRendererOption
+	if len(spec) > 0 {
+		opts = append(opts, glamour.WithStylesFromJSONBytes(spec))
+	} else {
+		opts = append(opts, glamour.WithStandardStyle(style))
+	}
+	opts = append(opts, glamour.WithWordWrap(width))
+	r, err := glamour.NewTermRenderer(opts...)
 	if err != nil {
 		return nil
 	}
