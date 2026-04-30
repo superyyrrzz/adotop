@@ -64,6 +64,12 @@ type segment struct {
 
 const statuslineDivider = " ▏ "
 
+// statuslineGroupDivider separates hint *clusters* — wider than the
+// inner divider between mode/context segments, so the eye can tell
+// "these hints belong together" at a glance. The double box-drawing
+// glyph reads as a stronger boundary without adding bg color.
+const statuslineGroupDivider = "  ┃  "
+
 // renderStatusline composes the bottom statusline from the current
 // Model state. Layout (left-to-right):
 //
@@ -78,10 +84,10 @@ func renderStatusline(m Model) string {
 	left := []segment{{text: mode.label(), style: mode.style()}}
 	left = append(left, contextSegments(m)...)
 
-	// Mode/context above is always shown. Hints are individual segments
-	// rendered with the faint Footer style and joined with a thinner
-	// divider; they degrade by dropping tail items.
-	hints := hintSegments(m)
+	// Mode/context above is always shown. Hints are grouped clusters
+	// rendered with the faint Footer style; clusters separate with a
+	// wider divider and degrade by dropping tail clusters as a unit.
+	hints := hintGroups(m)
 
 	right := clockSegment()
 
@@ -162,41 +168,57 @@ func contextSegments(m Model) []segment {
 	return nil
 }
 
-// hintSegments produces the keybinding hints, one per segment, so the
-// statusline can drop hints from the tail when space runs short
-// without truncating mid-binding.
-func hintSegments(m Model) []segment {
+// hintGroups produces grouped keybinding hints. Each inner slice is a
+// cluster of related hints rendered with no internal divider so the
+// eye reads them as one unit; clusters are separated by the wider
+// statuslineGroupDivider when composed.
+//
+// Drop strategy when the line overflows: clusters fall off the tail as
+// a unit, never split mid-cluster — splitting would defeat the whole
+// point of grouping.
+func hintGroups(m Model) [][]segment {
 	if m.voteMenu || m.pendingAction.kind != "" {
 		return nil
 	}
 	if m.footerErr != "" {
-		// Error mode: replace the binding hints with a single
-		// "press any key to dismiss" cue. Routine hints would compete
-		// with the error message for the user's attention, and the
-		// binding the user actually needs in this state is "make it
-		// go away".
-		return []segment{{text: "press any key to dismiss", style: hintStyle()}}
+		return [][]segment{{{text: "press any key to dismiss", style: hintStyle()}}}
 	}
-	var hints []string
+	var groups [][]string
 	switch m.screen {
 	case screenList:
-		hints = []string{"/:filter", "#:goto", "enter:open", "o:browser", "r:refresh", "tab:next", "?:help", "q:quit"}
-	case screenDetail:
-		// Comment-action hints are diff-focus-only — they don't apply
-		// (and the keys are no-ops) when the file list has focus, so
-		// showing them there is just clutter that costs us bar width.
-		// Placed right after R:show-resolved so the comment-domain hints
-		// cluster together and read as a related group.
-		base := []string{"tab:focus", "enter:diff/expand", "n/N:file", "gg/G:top/end", "R:show-resolved"}
-		if m.detailFocus == focusDiff {
-			base = append(base, "[/]:thread", "c:new", "C:reply", "x:resolve")
+		groups = [][]string{
+			{"/:filter", "#:goto"},                  // search
+			{"enter:open", "o:browser"},             // open
+			{"tab:next"},                            // nav
+			{"r:refresh"},                           // refresh
+			{"?:help", "q:quit"},                    // chrome
 		}
-		base = append(base, "a:approve", "v:vote", "X:abandon", "o:browser", "r:refresh", wrapHint(m), "+/-:context", "?:help", "esc:back")
-		hints = base
+	case screenDetail:
+		// Cluster vocabulary:
+		//   nav      — tab/n/N/gg/G:  move within the detail screen
+		//   threads  — R/[/]/c/C/x:   work on review threads (diff focus only)
+		//   actions  — a/v/X:         vote / abandon (PR-level state changes)
+		//   open     — o:             external link
+		//   view     — w/+/-:         display toggles (wrap, ctx)
+		//   chrome   — r/?/esc:       refresh, help, exit
+		nav := []string{"tab:focus", "enter:diff/expand", "n/N:file", "gg/G:top/end"}
+		threads := []string{"R:show-resolved"}
+		if m.detailFocus == focusDiff {
+			threads = append(threads, "[/]:thread", "c:new", "C:reply", "x:resolve")
+		}
+		actions := []string{"a:approve", "v:vote", "X:abandon"}
+		open := []string{"o:browser"}
+		view := []string{wrapHint(m), "+/-:context"}
+		chrome := []string{"r:refresh", "?:help", "esc:back"}
+		groups = [][]string{nav, threads, actions, open, view, chrome}
 	}
-	out := make([]segment, 0, len(hints))
-	for _, h := range hints {
-		out = append(out, segment{text: h, style: hintStyle()})
+	out := make([][]segment, 0, len(groups))
+	for _, g := range groups {
+		segs := make([]segment, 0, len(g))
+		for _, h := range g {
+			segs = append(segs, segment{text: h, style: hintStyle()})
+		}
+		out = append(out, segs)
 	}
 	return out
 }
@@ -217,13 +239,14 @@ func isClockHidden() bool {
 
 // composeStatusline glues the parts together with overflow-aware logic:
 // left segments are joined first, then the clock is right-aligned, and
-// hint segments fill what's left, dropping from the tail if needed.
-func composeStatusline(left []segment, hints []segment, right string, width int) string {
+// hint clusters fill what's left, dropping from the tail if needed.
+func composeStatusline(left []segment, hints [][]segment, right string, width int) string {
 	if width <= 0 {
 		// Fallback: just join everything with the divider, no width math.
-		all := append([]segment{}, left...)
-		all = append(all, hints...)
-		s := joinSegments(all)
+		s := joinSegments(left)
+		if hs := joinHintGroups(hints); hs != "" {
+			s += statuslineDivider + hs
+		}
 		if right != "" {
 			s += "  " + right
 		}
@@ -236,7 +259,7 @@ func composeStatusline(left []segment, hints []segment, right string, width int)
 	if avail < 0 {
 		avail = 0
 	}
-	hintStr := fitHints(hints, avail)
+	hintStr := fitHintGroups(hints, avail)
 
 	// Build the line: left + hints (with divider if both present),
 	// then pad to push the clock to the right.
@@ -251,19 +274,51 @@ func composeStatusline(left []segment, hints []segment, right string, width int)
 	return mid + strings.Repeat(" ", pad) + right
 }
 
-// fitHints drops tail hints until the joined string fits in maxWidth.
-// Returns "" if even one hint won't fit.
-func fitHints(hints []segment, maxWidth int) string {
-	if maxWidth <= 0 || len(hints) == 0 {
+// fitHintGroups drops tail clusters until the joined string fits in
+// maxWidth. Within-cluster items are atomic: we never split a cluster
+// in half, because the whole point of clustering is to keep related
+// hints together.
+func fitHintGroups(groups [][]segment, maxWidth int) string {
+	if maxWidth <= 0 || len(groups) == 0 {
 		return ""
 	}
-	for take := len(hints); take > 0; take-- {
-		s := joinSegments(hints[:take])
+	for take := len(groups); take > 0; take-- {
+		s := joinHintGroups(groups[:take])
 		if lipgloss.Width(s) <= maxWidth {
 			return s
 		}
 	}
 	return ""
+}
+
+// joinHintGroups renders each cluster (no divider inside) and joins the
+// clusters with the wider statuslineGroupDivider. Empty input yields "".
+func joinHintGroups(groups [][]segment) string {
+	if len(groups) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(groups))
+	for _, g := range groups {
+		if len(g) == 0 {
+			continue
+		}
+		parts = append(parts, joinHintCluster(g))
+	}
+	return strings.Join(parts, Faint.Render(statuslineGroupDivider))
+}
+
+// joinHintCluster renders the items in a cluster with a single space
+// between them — no chip bg, no divider — so the cluster reads as one
+// dense, scannable group.
+func joinHintCluster(segs []segment) string {
+	if len(segs) == 0 {
+		return ""
+	}
+	parts := make([]string, len(segs))
+	for i, s := range segs {
+		parts[i] = s.style.Render(s.text)
+	}
+	return strings.Join(parts, " ")
 }
 
 func joinSegments(segs []segment) string {
