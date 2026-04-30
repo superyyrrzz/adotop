@@ -52,6 +52,24 @@ type Theme struct {
 	// bug. On every theme this is a near-black so the label punches
 	// through.
 	PillFgOnLight lipgloss.Color
+
+	// Semantic roles. Aliases of the palette colors above, named for
+	// what they're FOR rather than what they ARE. Consumers should
+	// prefer these so the visual contract is "every Accent surface
+	// uses one color" — recoloring becomes a one-line change here
+	// instead of grepping every file for "Mauve".
+	Accent     lipgloss.Color // selection / focus / "you are here"
+	Success    lipgloss.Color // approved / succeeded / ready
+	Danger     lipgloss.Color // failed / rejected / conflict
+	Attention  lipgloss.Color // pending / draft / waiting
+	Info       lipgloss.Color // checking / informational
+	Identifier lipgloss.Color // authors / branches / PR numbers / labels
+
+	// GlamourStyle is the markdown style name passed to glamour's
+	// renderer. "dark" or "light" — light themes need "light" so
+	// rendered code blocks and headings don't blast Mocha colors
+	// onto a Latte background.
+	GlamourStyle string
 }
 
 // New resolves a Theme from an explicit override or terminal detection.

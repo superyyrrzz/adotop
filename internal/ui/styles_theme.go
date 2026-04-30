@@ -54,41 +54,42 @@ type Styles struct {
 //
 // Color discipline (single-accent rule):
 //
-// The theme's Mauve is reserved for the "you are here / this is
-// selected" vocabulary, and ONLY for that. Five legitimate uses today:
+// The theme's Accent role (Mauve in Catppuccin) is reserved for the
+// "you are here / this is selected" vocabulary, and ONLY for that.
+// Five legitimate uses today:
 //
 //  1. Active breadcrumb crumb in the topbar (renderTopbar)
 //  2. Active tab pill in the tab strip (TabOn)
-//  3. List cursor bar `▌` in the PR list (Cursor)
+//  3. List cursor stripe `▌` in the PR list (Cursor)
 //  4. Focused pane border in the detail screen (focusedPaneBorder)
 //  5. PillDone for the MERGED PR-state chip and the vote-menu mode pill
 //
-// New mauve usage anywhere else dilutes the signal. Prefer Header
-// (bold blue) for labels/identifiers, Faint (Subtext) for secondary
-// text, and the semantic pill styles (PillGood / PillBad / PillWarn /
+// New Accent usage anywhere else dilutes the signal. Prefer Header
+// (bold Identifier) for labels, Faint (Subtext) for secondary text,
+// and the semantic pill styles (PillGood / PillBad / PillWarn /
 // PillInfo) for state.
 func NewStyles(t theme.Theme) Styles {
 	return Styles{
-		Header:   lipgloss.NewStyle().Bold(true).Foreground(t.Blue),
+		Header:   lipgloss.NewStyle().Bold(true).Foreground(t.Identifier),
 		Faint:    lipgloss.NewStyle().Foreground(t.Subtext),
-		ErrLine:  lipgloss.NewStyle().Foreground(t.Red),
-		TabOn:    pillStyle(t.Mauve, t.PillFgOnSaturated),
+		ErrLine:  lipgloss.NewStyle().Foreground(t.Danger),
+		TabOn:    pillStyle(t.Accent, t.PillFgOnSaturated),
 		TabOff:   lipgloss.NewStyle().Foreground(t.Subtext),
 		Selected: lipgloss.NewStyle().Reverse(true),
-		Cursor:   lipgloss.NewStyle().Foreground(t.Mauve).Bold(true),
+		Cursor:   lipgloss.NewStyle().Foreground(t.Accent).Bold(true),
 		HelpBox: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(t.Overlay).
 			Padding(0, 1),
 		ModalBox: lipgloss.NewStyle().
 			Border(lipgloss.ThickBorder()).
-			BorderForeground(t.Mauve).
+			BorderForeground(t.Accent).
 			Background(t.Surface).
 			Foreground(t.Text).
 			Padding(1, 4),
-		Approve: lipgloss.NewStyle().Foreground(t.Green),
-		Reject:  lipgloss.NewStyle().Foreground(t.Red),
-		Wait:    lipgloss.NewStyle().Foreground(t.Yellow),
+		Approve: lipgloss.NewStyle().Foreground(t.Success),
+		Reject:  lipgloss.NewStyle().Foreground(t.Danger),
+		Wait:    lipgloss.NewStyle().Foreground(t.Attention),
 		None:    lipgloss.NewStyle().Foreground(t.Subtext),
 		Footer:  lipgloss.NewStyle().Foreground(t.Subtext),
 
@@ -98,12 +99,12 @@ func NewStyles(t theme.Theme) Styles {
 		// variant picks the foreground that actually contrasts on its
 		// own palette (see Theme.PillFgOnSaturated). The neutral pill
 		// has its own bg/fg pair so it doesn't degrade to grey-on-grey.
-		PillGood:    pillStyle(t.Green, t.PillFgOnSaturated),
-		PillBad:     pillStyle(t.Red, t.PillFgOnSaturated),
-		PillWarn:    pillStyle(t.Yellow, t.PillFgOnLight),
-		PillInfo:    pillStyle(t.Sky, t.PillFgOnSaturated),
+		PillGood:    pillStyle(t.Success, t.PillFgOnSaturated),
+		PillBad:     pillStyle(t.Danger, t.PillFgOnSaturated),
+		PillWarn:    pillStyle(t.Attention, t.PillFgOnLight),
+		PillInfo:    pillStyle(t.Info, t.PillFgOnSaturated),
 		PillNeutral: pillStyle(t.PillNeutralBg, t.PillNeutralFg),
-		PillDone:    pillStyle(t.Mauve, t.PillFgOnSaturated),
+		PillDone:    pillStyle(t.Accent, t.PillFgOnSaturated),
 	}
 }
 

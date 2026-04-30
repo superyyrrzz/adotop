@@ -32,5 +32,13 @@ func newCatppuccinMocha() Theme {
 
 		PillFgOnSaturated: lipgloss.Color("#11111b"), // Catppuccin "Crust": near-black, reads cleanly on every accent.
 		PillFgOnLight:     lipgloss.Color("#11111b"),
+
+		Accent:     lipgloss.Color("#cba6f7"), // Mauve
+		Success:    lipgloss.Color("#a6e3a1"), // Green
+		Danger:     lipgloss.Color("#f38ba8"), // Red
+		Attention:  lipgloss.Color("#f9e2af"), // Yellow
+		Info:       lipgloss.Color("#89dceb"), // Sky
+		Identifier: lipgloss.Color("#89b4fa"), // Blue
+		GlamourStyle: "dark",
 	}
 }

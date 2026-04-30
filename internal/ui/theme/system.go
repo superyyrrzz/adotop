@@ -61,5 +61,16 @@ func newSystem() Theme {
 		// Yellow is too bright for white text — black-on-yellow is the
 		// universal high-contrast convention for warning chips.
 		PillFgOnLight: lipgloss.Color("0"),
+
+		Accent:     lipgloss.Color("13"), // bright magenta
+		Success:    lipgloss.Color("10"), // bright green
+		Danger:     lipgloss.Color("9"),  // bright red
+		Attention:  lipgloss.Color("11"), // bright yellow
+		Info:       lipgloss.Color("14"), // bright cyan
+		Identifier: lipgloss.Color("12"), // bright blue
+		// "dark" is the safer default for system themes — most terminal
+		// schemes are dark. Auto-detection lives in the "auto" path
+		// (Mocha/Latte) where we know the bg.
+		GlamourStyle: "dark",
 	}
 }

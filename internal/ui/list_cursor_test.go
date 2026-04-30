@@ -11,16 +11,16 @@ import (
 )
 
 // TestCursorRowIsBracketed is the regression guard for the cursor
-// styling: the highlighted row must be wrapped in a mauve rounded
-// frame (top corner ╭, side rails │, bottom corner ╰) and the
-// non-highlighted rows must not carry frame characters.
+// styling: the highlighted row must carry a left-edge mauve accent
+// stripe (▌) on both of its lines, and non-highlighted rows must
+// not carry the stripe glyph.
 //
-// History: this replaced an earlier "▌" gutter marker, which itself
-// replaced a Selected.Reverse(true) approach. The bracket is the
-// strongest signal of the three because it visually contains the row
-// instead of just decorating its left edge — important on wide
-// terminals where the leftmost column is far from where the user's
-// eyes track.
+// History: this is the third iteration. Started as Selected.Reverse(true)
+// (heavy grey block, fought with chip bgs); evolved to a full rounded
+// frame ╭──╮│ │╰──╯ (visually contained the row but added 2 lines of
+// chrome and a heavy "boxed" look); now a 1-col left stripe — borrowed
+// from glow — gives the same "you are here" cue with no extra height
+// and a lighter overall feel.
 func TestCursorRowIsBracketed(t *testing.T) {
 	now := time.Now()
 	prs := []ado.PRSummary{
@@ -54,28 +54,27 @@ func TestCursorRowIsBracketed(t *testing.T) {
 		}
 	}
 
-	// Cursor row (second PR) must carry the side rail │ on both
-	// lines, and the line above must be the top corner ╭, the line
-	// below the bottom corner ╰.
-	if !strings.Contains(lines[secondRowIdx], "│") {
-		t.Fatalf("cursor row first line missing │ side rail:\n%s", lines[secondRowIdx])
+	// Cursor row (second PR) must carry the left-stripe ▌ on both its
+	// data line and its meta line below.
+	if !strings.Contains(lines[secondRowIdx], "▌") {
+		t.Fatalf("cursor row data line missing ▌ stripe:\n%s", lines[secondRowIdx])
 	}
-	if secondRowIdx+1 >= len(lines) || !strings.Contains(lines[secondRowIdx+1], "│") {
-		t.Fatalf("cursor row second line missing │ side rail:\n%s", lines[secondRowIdx+1])
-	}
-	if secondRowIdx-1 < 0 || !strings.Contains(lines[secondRowIdx-1], "╭") {
-		t.Fatalf("cursor row should be preceded by ╭ top border:\n%s", lines[secondRowIdx-1])
-	}
-	if secondRowIdx+2 >= len(lines) || !strings.Contains(lines[secondRowIdx+2], "╰") {
-		t.Fatalf("cursor row should be followed by ╰ bottom border:\n%s", lines[secondRowIdx+2])
+	if secondRowIdx+1 >= len(lines) || !strings.Contains(lines[secondRowIdx+1], "▌") {
+		t.Fatalf("cursor row meta line missing ▌ stripe:\n%s", lines[secondRowIdx+1])
 	}
 
-	// Non-cursor rows must NOT carry frame side rails.
-	if strings.Contains(lines[firstRowIdx], "│") {
-		t.Fatalf("non-cursor row #1 should not have │ frame:\n%s", lines[firstRowIdx])
-	}
-	if strings.Contains(lines[thirdRowIdx], "│") {
-		t.Fatalf("non-cursor row #3 should not have │ frame:\n%s", lines[thirdRowIdx])
+	// Non-cursor rows must NOT carry the stripe glyph anywhere on their
+	// rendered lines (data line + meta line each).
+	for _, label := range []struct {
+		name string
+		idx  int
+	}{{"#1", firstRowIdx}, {"#3", thirdRowIdx}} {
+		if strings.Contains(lines[label.idx], "▌") {
+			t.Fatalf("non-cursor row %s should not have ▌ stripe:\n%s", label.name, lines[label.idx])
+		}
+		if label.idx+1 < len(lines) && strings.Contains(lines[label.idx+1], "▌") {
+			t.Fatalf("non-cursor row %s meta line should not have ▌ stripe:\n%s", label.name, lines[label.idx+1])
+		}
 	}
 }
 

@@ -75,4 +75,9 @@ func applyStyles(t theme.Theme) {
 	PillInfo = s.PillInfo
 	PillNeutral = s.PillNeutral
 	PillDone = s.PillDone
+
+	// Glamour reads its style from a package var (not Styles) because
+	// the renderer is constructed lazily inside commentbody.go's cache.
+	// Update it here so a theme switch propagates to subsequent renders.
+	glamourStyleName = t.GlamourStyle
 }

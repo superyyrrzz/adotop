@@ -49,10 +49,14 @@ func overlayLoadingModal(body string, prID, frame, width, height int) string {
 // "LOADING" header on top and the PR identifier with spinner below.
 // Width is fixed so the box doesn't shimmer as the spinner glyph
 // changes pixel width across frames.
+//
+// Header foreground is pulled from Cursor (the package-level accent
+// style) so a theme switch — Mocha → Latte — recolors the modal
+// without anyone having to remember to update a literal hex here.
 func renderLoadingBox(prID, frame int) string {
 	header := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#cba6f7")). // Mauve, matches selection frame
+		Foreground(Cursor.GetForeground()).
 		Render("LOADING")
 	spinner := spinnerFrames[frame%len(spinnerFrames)]
 	body := fmt.Sprintf("%s  PR #%d", spinner, prID)

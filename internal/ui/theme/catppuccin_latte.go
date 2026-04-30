@@ -30,5 +30,13 @@ func newCatppuccinLatte() Theme {
 
 		PillFgOnSaturated: lipgloss.Color("#000000"),
 		PillFgOnLight:     lipgloss.Color("#000000"),
+
+		Accent:     lipgloss.Color("#8839ef"), // Mauve
+		Success:    lipgloss.Color("#40a02b"), // Green
+		Danger:     lipgloss.Color("#d20f39"), // Red
+		Attention:  lipgloss.Color("#df8e1d"), // Yellow
+		Info:       lipgloss.Color("#04a5e5"), // Sky
+		Identifier: lipgloss.Color("#1e66f5"), // Blue
+		GlamourStyle: "light",
 	}
 }

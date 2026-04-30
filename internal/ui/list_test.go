@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 	"github.com/superyyrrzz/adotop/internal/ado"
 )
@@ -131,11 +132,13 @@ func TestListAllColumnsAlignAcrossVaryingInputs(t *testing.T) {
 	out := m.View()
 	rows := []string{}
 	for _, line := range strings.Split(out, "\n") {
-		// Cursor row's data line starts with "│ " (the bracket left
-		// rail + padding); non-cursor rows start with the 2-space
-		// rowIndent. Strip whichever to find the "#" column.
-		trim := strings.TrimLeft(line, " ")
-		trim = strings.TrimPrefix(trim, "│")
+		// Cursor row starts with the mauve ▌ stripe (wrapped in ANSI);
+		// non-cursor rows start with the 2-space rowIndent. Strip
+		// leading whitespace and the stripe glyph to find the "#"
+		// column. ansi.Strip removes the SGR escapes around ▌.
+		trim := ansi.Strip(line)
+		trim = strings.TrimLeft(trim, " ")
+		trim = strings.TrimPrefix(trim, "▌")
 		trim = strings.TrimLeft(trim, " ")
 		if strings.HasPrefix(trim, "#") {
 			rows = append(rows, line)

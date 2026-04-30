@@ -88,7 +88,10 @@ func (m Model) renderDescModal() string {
 	}
 	st := m.descModal
 	pct := int(st.vp.ScrollPercent() * 100)
-	title := lipgloss.NewStyle().Bold(true).Render("PR Description")
+	// Title uses the Cursor accent so the modal's header reads as a
+	// peer of the loading modal's "LOADING" header — both are
+	// "this is the active surface" labels.
+	title := lipgloss.NewStyle().Bold(true).Foreground(Cursor.GetForeground()).Render("PR Description")
 	pos := Faint.Render(formatPercent(pct))
 	titleBar := lipgloss.JoinHorizontal(lipgloss.Top, title, "  ", pos)
 	hint := Faint.Render("j/k scroll · g/G top/end · esc/D/q close")

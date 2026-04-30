@@ -60,10 +60,21 @@ func detectCommentFormat(s string) commentFormat {
 // is expensive (loads styles, parses CSS-like config) but pure; renders
 // are cheap. The detail viewport width changes only on terminal resize,
 // so this cache is bounded in practice to a handful of entries.
+//
+// glamourStyleName is the active glamour style ("dark"/"light") set by
+// applyStyles from the theme. The cache key includes it so a theme
+// switch mid-session (rare, but possible) doesn't serve a stale
+// renderer with the old style.
 var (
-	glamourMu    sync.Mutex
-	glamourCache = map[int]*glamour.TermRenderer{}
+	glamourMu        sync.Mutex
+	glamourCache     = map[glamourCacheKey]*glamour.TermRenderer{}
+	glamourStyleName = "dark"
 )
+
+type glamourCacheKey struct {
+	width int
+	style string
+}
 
 func glamourRenderer(width int) *glamour.TermRenderer {
 	if width <= 0 {
@@ -71,22 +82,25 @@ func glamourRenderer(width int) *glamour.TermRenderer {
 	}
 	glamourMu.Lock()
 	defer glamourMu.Unlock()
-	if r, ok := glamourCache[width]; ok {
+	style := glamourStyleName
+	key := glamourCacheKey{width: width, style: style}
+	if r, ok := glamourCache[key]; ok {
 		return r
 	}
-	// WithAutoStyle picks a "dark"/"light"/"notty" style based on the
+	// glamour's WithAutoStyle picks "dark"/"light"/"notty" from the
 	// surrounding terminal. The "notty" path (used in tests and pipes)
-	// strips emphasis, which makes the Markdown render-loop look like a
-	// no-op for `**bold**`. Force "dark" so emphasis is always applied;
-	// adotop's own theme detection drives the rest of the UI palette.
+	// strips emphasis, which makes the Markdown render-loop look like
+	// a no-op for `**bold**`. Force the style explicitly so emphasis is
+	// always applied, and so light-theme users get a light-styled
+	// markdown render that doesn't blast Mocha colors onto Latte.
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle("dark"),
+		glamour.WithStandardStyle(style),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {
 		return nil
 	}
-	glamourCache[width] = r
+	glamourCache[key] = r
 	return r
 }
 

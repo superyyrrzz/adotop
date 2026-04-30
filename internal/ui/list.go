@@ -46,10 +46,9 @@ func (m ListModel) Tab() ado.Tab { return m.tab }
 //   - non-compact (two-line) row: 1 data line + 1 meta line + 1 separator = 3
 //   - compact (one-line) row:     1 data line + 1 separator           = 2
 //
-// The selected row is wrapped in a mauve rounded frame, which adds
-// 2 lines (top + bottom border) to that one row. The bottom border
-// replaces the inter-row separator so net cost is +2 lines per
-// window, not per row. We bake that +2 into the chrome budget.
+// The selected row uses a 1-col left-edge accent stripe instead of a
+// box border, so it occupies the same height as any other row — no
+// extra-line bookkeeping needed.
 //
 // Chrome above/below the list rows we have to leave room for:
 //   - topbar bar + rule                  = 2
@@ -63,9 +62,8 @@ func (m ListModel) Tab() ado.Tab { return m.tab }
 //                                            pager doesn't shove rows
 //                                            out of view at the moment
 //                                            it appears)
-//   - selection bracket extra lines      = 2
 //
-// Total chrome = 11. Underestimating chrome scrolls the topbar and
+// Total chrome = 9. Underestimating chrome scrolls the topbar and
 // tab strip off the top of the alt-screen, which is how the "topbar
 // disappears" bug manifests in tall lists.
 func (m ListModel) window(total int) (int, int) {
@@ -73,7 +71,7 @@ func (m ListModel) window(total int) (int, int) {
 	if m.width > 0 && m.width < 90 {
 		rowLines = 2
 	}
-	const chrome = 11
+	const chrome = 9
 	if m.height <= 0 {
 		return 0, total
 	}
@@ -417,10 +415,10 @@ func (m ListModel) View() string {
 				b.WriteString(indentRowBlock(block))
 			}
 			b.WriteString("\n")
-			// Inter-row separator. Skip after the last visible row, AND
-			// skip immediately after the bracketed row — its bottom
-			// border already serves as the separator.
-			if i < end-1 && i != m.cursor {
+			// Inter-row separator after every row except the last visible
+			// one. The selected row no longer adds a border, so it gets a
+			// separator like everything else.
+			if i < end-1 {
 				b.WriteString(Faint.Render(strings.Repeat("─", m.rowSeparatorWidth())))
 				b.WriteString("\n")
 			}
@@ -452,20 +450,19 @@ const stateColWidth = 12
 // with the data rows under either path.
 const rowIndent = "  "
 
-// renderSelectedRow wraps a row's two-line block in a mauve rounded
-// frame. The frame's interior has 1 col of horizontal padding so the
-// content starts at column 2 — matching the 2-col rowIndent on
-// unselected rows. We deliberately do NOT set Width: forcing a width
-// makes lipgloss wrap the long data line (which already extends past
-// the typical separator). Letting the frame auto-size to its widest
-// inner line means the bottom border may not span the full row, but
-// the row's existing data stays on one line which matters more.
+// renderSelectedRow paints a 1-col mauve accent stripe down the left
+// edge of the row's two-line block — a glow-style "you are here" cue
+// that doesn't enclose the row in a box. The accent occupies the same
+// 2-col rowIndent as unselected rows ("▌ "), so columns line up
+// across the whole list. No top/bottom border means the row's height
+// stays equal to non-selected rows, simplifying the window math.
 func renderSelectedRow(block string, sepWidth int) string {
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(Cursor.GetForeground()).
-		Padding(0, 1).
-		Render(block)
+	stripe := Cursor.Render("▌") + " "
+	lines := strings.Split(block, "\n")
+	for i, ln := range lines {
+		lines[i] = stripe + ln
+	}
+	return strings.Join(lines, "\n")
 }
 
 // indentRowBlock prefixes both lines of a non-selected row with the
