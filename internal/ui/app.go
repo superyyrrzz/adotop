@@ -1318,14 +1318,37 @@ func (m Model) detailPreviewView() string {
 		return strings.Join([]string{left, "", right}, "\n")
 	}
 	leftPane := lipgloss.NewStyle().
-		Width(layout.leftWidth).
-		MaxWidth(layout.leftWidth).
+		Width(layout.leftWidth - 2).
+		MaxWidth(layout.leftWidth - 2).
 		Height(layout.bodyHeight).
 		Render(left)
+	leftPane = leftPaneFocusStripe(leftPane, m.detailFocus == focusFiles)
 	previewBody := m.previewPaneBody()
 	previewTitle := m.previewPaneTitle()
 	rightPane := borderedPane(previewTitle, previewBody, layout.rightWidth, layout.bodyHeight, m.detailFocus == focusDiff)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, rightPane)
+}
+
+// leftPaneFocusStripe prefixes each line of the left pane with a 1-col
+// mauve accent stripe ("▌") when focused, or 2 spaces when not. Same
+// vocabulary as the list cursor stripe — focus is a peer of "you are
+// here" so it gets the same Cursor color. The right pane already
+// carries its own focus cue (border tint), so we only style the left.
+//
+// Caller must reduce the leftPane render width by 2 cols beforehand so
+// the total horizontal budget stays unchanged.
+func leftPaneFocusStripe(pane string, focused bool) string {
+	var prefix string
+	if focused {
+		prefix = Cursor.Render("▌") + " "
+	} else {
+		prefix = "  "
+	}
+	lines := strings.Split(pane, "\n")
+	for i, ln := range lines {
+		lines[i] = prefix + ln
+	}
+	return strings.Join(lines, "\n")
 }
 
 // previewPaneTitle returns the label spliced into the right pane's
