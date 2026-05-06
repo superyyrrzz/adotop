@@ -26,6 +26,54 @@ func (m Model) threadsForFile(path string) []ado.Thread {
 	return out
 }
 
+// anchoredThreadsForFile returns threads attached to the file path with
+// a right-side line anchor (RightLine > 0), applying showResolved.
+// These render INLINE under their target diff line via spliceInlineComments.
+func (m Model) anchoredThreadsForFile(path string) []ado.Thread {
+	out := make([]ado.Thread, 0, len(m.threads))
+	for _, t := range m.threads {
+		if t.FilePath != path || t.RightLine <= 0 {
+			continue
+		}
+		if !m.showResolved && t.IsResolved() {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// unanchoredThreadsForFile returns threads attached to the file but
+// without a right-side line anchor (RightLine == 0). These render in
+// the file-level footer block since there's no specific line to
+// attach them to. Includes left-side-only deletions and pre-line
+// "general file feedback" threads.
+func (m Model) unanchoredThreadsForFile(path string) []ado.Thread {
+	out := make([]ado.Thread, 0, len(m.threads))
+	for _, t := range m.threads {
+		if t.FilePath != path || t.RightLine > 0 {
+			continue
+		}
+		if !m.showResolved && t.IsResolved() {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// selectedThreadIDForFile returns the ID of the thread currently under
+// the per-file cursor, or 0 when there's no cursor (no threads, or the
+// cursor index is out of range). Used by both inline and footer
+// renderers to highlight "the one I'm on".
+func (m Model) selectedThreadIDForFile(path string) int {
+	threads := m.threadsForFile(path)
+	if idx, ok := m.threadCursor[path]; ok && idx >= 0 && idx < len(threads) {
+		return threads[idx].ID
+	}
+	return 0
+}
+
 // expandThreadsForFile unconditionally expands every visible thread on
 // the given file. Returns true when at least one thread was visible
 // (so the caller knows there's something worth scrolling to). Used by
@@ -66,14 +114,22 @@ func (m Model) toggleThreadsForFile(path string) (Model, bool) {
 
 // refreshPreview re-renders the diff preview viewport's content so that
 // changes to thread filters / expansion show up immediately. No-op when
-// no preview is loaded yet, or when there's no comments block AND the
-// viewport already has content (the diffLoadedMsg path or a previous
-// refresh already wrote it).
+// no preview is loaded yet.
 //
-// We skip the SetContent when the comments block is empty because the
-// viewport already shows the colorized diff that was set in the
-// diffLoadedMsg handler — recomputing it just trashes the scroll
-// position and wastes a Colorize.
+// The viewport is always rewritten — earlier code skipped SetContent
+// when there were no comments to fold in, but that branch made the wrap
+// toggle one-way: turning wrap OFF would early-return with the still-
+// wrapped content in place. refreshPreview is only ever called from
+// explicit user actions (toggle, expand, refresh) or message arrivals
+// (diffLoadedMsg, threadsLoadedMsg) — never from j/k — so the rebuild
+// cost is fine.
+//
+// Pipeline:
+//  1. Get the colorized diff body from cache.
+//  2. Splice anchored thread comment blocks INLINE under their target
+//     diff line (reuses the raw uncolorized bytes to map line numbers).
+//  3. Optionally wrap long diff lines if the user toggled wrap.
+//  4. Append the file-level footer block for unanchored threads.
 func (m Model) refreshPreview() Model {
 	if m.previewKey == "" {
 		return m
@@ -82,19 +138,25 @@ func (m Model) refreshPreview() Model {
 	if !ok {
 		return m
 	}
-	commentsBlock := m.previewCommentsBlock()
-	composed := composeDiffWithComments(nil, commentsBlock)
 	body := rendered
+	// Inline-splice anchored threads. Pull raw bytes (Get) for the line-
+	// number map; both cache entries are bytes for the same diff so they
+	// stay in lockstep.
+	if raw, rok := m.previewCache.Get(m.previewKey); rok && raw != nil {
+		if f, fok := m.detail.SelectedFile(); fok {
+			anchored := m.anchoredThreadsForFile(f.Path)
+			if len(anchored) > 0 {
+				selected := m.selectedThreadIDForFile(f.Path)
+				lineNums := rightLineNumbers(raw)
+				body = spliceInlineComments(body, lineNums, inlineThreadsByLine(anchored), m.expandedThread, m.preview.vp.Width, selected)
+			}
+		}
+	}
 	if m.wrapDiff {
 		body = wrapDiffLines(body, m.preview.vp.Width)
 	}
-	// Always rewrite the viewport. Earlier code skipped SetContent when
-	// there were no comments to fold in and the diff was already loaded —
-	// but that branch made the wrap toggle one-way: turning wrap OFF
-	// would early-return with the still-wrapped content in place.
-	// refreshPreview is only ever called from explicit user actions
-	// (toggle, expand, refresh) or message arrivals (diffLoadedMsg,
-	// threadsLoadedMsg) — never from j/k — so the rebuild cost is fine.
+	commentsBlock := m.previewCommentsBlock()
+	composed := composeDiffWithComments(nil, commentsBlock)
 	m.preview.vp.SetContent(body + composed)
 	return m
 }
@@ -126,17 +188,25 @@ func (m Model) scrollPreviewToComments() Model {
 }
 
 // previewCommentsBlock returns the rendered "Comments" footer for the
-// currently-selected file in the diff preview pane.
+// currently-selected file in the diff preview pane. Anchored threads
+// render inline under their diff line (see refreshPreview), so the
+// footer carries only unanchored threads — file-level feedback that
+// has no specific line to attach to.
+//
+// Returns empty when there's nothing unanchored to show; the sticky
+// resolved-comments band at the bottom of the pane already carries the
+// "N hidden resolved" affordance, so we don't need a redundant footer
+// header just to repeat it.
 func (m Model) previewCommentsBlock() string {
 	f, ok := m.detail.SelectedFile()
 	if !ok {
 		return ""
 	}
-	threads := m.threadsForFile(f.Path)
-	selected := 0
-	if idx, ok := m.threadCursor[f.Path]; ok && idx >= 0 && idx < len(threads) {
-		selected = threads[idx].ID
+	threads := m.unanchoredThreadsForFile(f.Path)
+	if len(threads) == 0 {
+		return ""
 	}
+	selected := m.selectedThreadIDForFile(f.Path)
 	return renderCommentsBlockWithCursor(threads, m.expandedThread, m.showResolved, m.threads, f.Path, m.preview.vp.Width, selected)
 }
 
