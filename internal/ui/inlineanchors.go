@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
@@ -106,18 +108,21 @@ func inlineThreadsByLine(threads []ado.Thread) map[int][]ado.Thread {
 // line counts will silently misalign comments. (Empirically Colorize
 // always emits exactly one output line per input line.)
 //
-// Comment blocks are indented and prefixed with a tree connector so
-// the eye reads them as "child of the line above" rather than as
-// peer content.
-func spliceInlineComments(rendered string, lineNums []int, byLine map[int][]ado.Thread, expanded map[int]bool, width int, selectedThreadID int) string {
+// Returns the spliced body AND a map of thread ID → 0-based output line
+// index where each inline thread starts. Callers use the map to scroll
+// the viewport to a selected thread without re-walking the body.
+func spliceInlineComments(rendered string, lineNums []int, byLine map[int][]ado.Thread, expanded map[int]bool, width int, selectedThreadID int) (string, map[int]int) {
+	threadLines := map[int]int{}
 	if len(byLine) == 0 {
-		return rendered
+		return rendered, threadLines
 	}
 	lines := strings.SplitAfter(rendered, "\n")
 	var b strings.Builder
 	b.Grow(len(rendered) + 256)
+	out := 0 // running output line index
 	for i, line := range lines {
 		b.WriteString(line)
+		out++
 		if i >= len(lineNums) {
 			continue
 		}
@@ -130,27 +135,30 @@ func spliceInlineComments(rendered string, lineNums []int, byLine map[int][]ado.
 			continue
 		}
 		for _, t := range threads {
-			b.WriteString(renderInlineThread(t, expanded[t.ID], width, selectedThreadID == t.ID))
+			threadLines[t.ID] = out
+			block := renderInlineThread(t, expanded[t.ID], width, selectedThreadID == t.ID)
+			b.WriteString(block)
+			out += strings.Count(block, "\n")
 		}
 	}
-	return b.String()
+	return b.String(), threadLines
 }
 
 // renderInlineThread formats one thread for inline display under a diff
 // line. Always trails with a newline so the next diff line starts on its
-// own row. The "└─" connector + 4-col indent visually attaches it to the
-// line above; the gutter chip flips on selection (cursor) state.
+// own row. The "└─" connector + indent visually attach it to the line
+// above; selection state flips both the gutter (thicker glyph) AND the
+// head row's background so the user can spot the cursor in a long diff
+// without hunting for a single-glyph mark.
 func renderInlineThread(t ado.Thread, expand bool, width int, selected bool) string {
 	const baseIndent = "      " // 6 cols: 3 for the diff gutter, 3 for the connector area
 	const wrapIndent = "      "
 	gutter := "    "
 	if selected {
-		gutter = "  " + Cursor.Render("▎") + " "
+		// Thicker block glyph (▌ vs ▎) makes the cursor visible at a
+		// glance even when the thread sits between many diff lines.
+		gutter = "  " + Cursor.Render("▌") + " "
 	}
-	// "└─" connector on the first line so the inline block reads as a
-	// child of the diff line above. Subsequent lines (replies, body
-	// continuation) get a plain space indent so the connector doesn't
-	// repeat — that would look like a separate thread each time.
 	connector := Faint.Render("└─ ")
 	rendered := renderThread(t, expand, maxInt(20, width-len(baseIndent)-2))
 	lines := strings.Split(rendered, "\n")
@@ -162,6 +170,13 @@ func renderInlineThread(t ado.Thread, expand bool, width int, selected bool) str
 		b.WriteString(gutter)
 		if idx == 0 {
 			b.WriteString(connector)
+			if selected {
+				// Soft accent bg on the head row only — keeps the body
+				// legible (full-block bg would fight chroma colors) while
+				// producing a clear "you are here" rectangle that pairs
+				// with the thicker gutter.
+				ln = inlineSelectedHeadStyle().Render(ln)
+			}
 		} else {
 			b.WriteString(wrapIndent[:3])
 		}
@@ -169,6 +184,17 @@ func renderInlineThread(t ado.Thread, expand bool, width int, selected bool) str
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// inlineSelectedHeadStyle returns the soft accent bg used to highlight
+// the selected inline thread's head row. Bg is the Cursor color at low
+// opacity (here approximated as the Overlay color which is already a
+// muted accent in every theme); fg is the theme's normal foreground via
+// lipgloss inheritance — we don't override it so chips and chroma keep
+// their colors readable on top.
+func inlineSelectedHeadStyle() lipgloss.Style {
+	bg := lipgloss.AdaptiveColor{Light: "#dce0e8", Dark: "#313244"}
+	return lipgloss.NewStyle().Background(bg)
 }
 
 // fmtLineLabel is a tiny helper used by callers that want to print a

@@ -87,6 +87,11 @@ type Model struct {
 	// Absent or out-of-range == no thread selected; the user must press
 	// [/] to land on a thread before C/x become meaningful.
 	threadCursor map[string]int
+	// inlineThreadLines maps a thread ID to the 0-based line index in
+	// the spliced preview body where that thread starts. Populated by
+	// refreshPreview after every inline splice; consumed by the cursor-
+	// move handler to scroll the viewport to the selected thread.
+	inlineThreadLines map[int]int
 	// wrapDiff toggles soft-wrap on the diff preview viewport. Off by
 	// default — most lines fit and visual line counts matter for
 	// scanning large diffs. Press `w` to enable when reading a file
@@ -938,6 +943,7 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m = m.moveThreadCursor(+1)
 		m = m.refreshPreview()
+		m = m.scrollPreviewToSelectedThread()
 		return m, nil
 	case keyMatches(msg, m.keys.PrevThread):
 		if m.detailFocus != focusDiff {
@@ -945,6 +951,7 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m = m.moveThreadCursor(-1)
 		m = m.refreshPreview()
+		m = m.scrollPreviewToSelectedThread()
 		return m, nil
 	case keyMatches(msg, m.keys.ToggleResolve):
 		if m.detailFocus != focusDiff {

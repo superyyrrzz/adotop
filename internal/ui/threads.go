@@ -141,14 +141,19 @@ func (m Model) refreshPreview() Model {
 	body := rendered
 	// Inline-splice anchored threads. Pull raw bytes (Get) for the line-
 	// number map; both cache entries are bytes for the same diff so they
-	// stay in lockstep.
+	// stay in lockstep. Stash the thread→lineIndex map on the model so
+	// the cursor-move handler can scroll to the selected thread without
+	// re-walking the body.
+	m.inlineThreadLines = nil
 	if raw, rok := m.previewCache.Get(m.previewKey); rok && raw != nil {
 		if f, fok := m.detail.SelectedFile(); fok {
 			anchored := m.anchoredThreadsForFile(f.Path)
 			if len(anchored) > 0 {
 				selected := m.selectedThreadIDForFile(f.Path)
 				lineNums := rightLineNumbers(raw)
-				body = spliceInlineComments(body, lineNums, inlineThreadsByLine(anchored), m.expandedThread, m.preview.vp.Width, selected)
+				var lineMap map[int]int
+				body, lineMap = spliceInlineComments(body, lineNums, inlineThreadsByLine(anchored), m.expandedThread, m.preview.vp.Width, selected)
+				m.inlineThreadLines = lineMap
 			}
 		}
 	}
@@ -161,19 +166,72 @@ func (m Model) refreshPreview() Model {
 	return m
 }
 
-// scrollPreviewToComments puts the preview viewport at the start of the
-// comments block — used after Enter expands a thread, and after R reveals
-// resolved threads, so the user doesn't have to scroll past the diff to
-// find what they just opened.
+// scrollPreviewToSelectedThread positions the diff viewport so the
+// currently-selected thread is visible. For inline (anchored) threads
+// we use the thread→lineIndex map captured during the last splice; for
+// unanchored threads we fall through to scrollPreviewToComments since
+// they live in the footer block.
 //
-// The diff body and the comments block are concatenated into a single
-// viewport string; the comments start at line `lipgloss.Height(body)`.
-// We clamp to the viewport's max scroll position so a comments block
-// that's shorter than one screen still scrolls to a sensible spot.
+// No-op when nothing is selected, or when the selected thread isn't
+// in the inline map (e.g., the file has no preview yet, or the thread
+// was filtered out by showResolved between cursor-move and refresh).
+func (m Model) scrollPreviewToSelectedThread() Model {
+	if m.previewKey == "" {
+		return m
+	}
+	id := m.currentThreadID()
+	if id == 0 {
+		return m
+	}
+	if line, ok := m.inlineThreadLines[id]; ok {
+		// Center the thread in view when possible: subtract a few rows
+		// so the selected thread isn't pinned at the very top, which
+		// makes the connection to the diff line above harder to see.
+		const lead = 2
+		off := line - lead
+		if off < 0 {
+			off = 0
+		}
+		m.preview.vp.SetYOffset(off)
+		return m
+	}
+	// Selected thread isn't inline — must be unanchored, in the footer.
+	return m.scrollPreviewToComments()
+}
+
+// scrollPreviewToComments puts the preview viewport at the FIRST
+// comment in the diff body — inline anchored comment if any exist,
+// otherwise the footer block. Used by J to land the user on a comment
+// regardless of where in the diff it sits.
+//
+// Earlier this jumped to the end of the diff body (where the footer
+// used to live), which was correct when ALL threads were in the
+// footer. Now that anchored threads inline under their target diff
+// line, the first comment may be near the top of a long diff —
+// jumping to the bottom would scroll past everything the user wanted
+// to read.
 func (m Model) scrollPreviewToComments() Model {
 	if m.previewKey == "" {
 		return m
 	}
+	if len(m.inlineThreadLines) > 0 {
+		first := -1
+		for _, line := range m.inlineThreadLines {
+			if first < 0 || line < first {
+				first = line
+			}
+		}
+		if first >= 0 {
+			const lead = 1
+			off := first - lead
+			if off < 0 {
+				off = 0
+			}
+			m.preview.vp.SetYOffset(off)
+			return m
+		}
+	}
+	// No inline threads — fall through to the footer block at the end.
 	rendered, ok := m.previewCache.Rendered(m.previewKey)
 	if !ok {
 		return m
@@ -337,10 +395,11 @@ func renderThread(t ado.Thread, expand bool, width int) string {
 	if t.IsResolved() {
 		bullet = "✓"
 	}
+	chip := threadStatusChip(t)
 
 	if !expand {
-		head := fmt.Sprintf("  %s %s  %s: %s",
-			bullet, Faint.Render(loc), Header.Render(first.Author), squeezeCommentOneLine(sanitizeComment(first.Author, first.Content), 200))
+		head := fmt.Sprintf("  %s %s %s  %s: %s",
+			bullet, chip, Faint.Render(loc), Header.Render(first.Author), squeezeCommentOneLine(sanitizeComment(first.Author, first.Content), 200))
 		if t.IsResolved() {
 			head = Faint.Render(head)
 		}
@@ -372,12 +431,12 @@ func renderThread(t ado.Thread, expand bool, width int) string {
 		return b.String()
 	}
 
-	// Expanded form. Header carries location + author of the OP; the
-	// body is rendered on its own indented lines so newlines and code
-	// blocks stay readable. renderCommentBody handles HTML and
-	// markdown bodies — ADO returns either, depending on author.
+	// Expanded form. Header carries status + location + author of the OP;
+	// the body is rendered on its own indented lines so newlines and code
+	// blocks stay readable. renderCommentBody handles HTML and markdown
+	// bodies — ADO returns either, depending on author.
 	const bodyIndent = "      "
-	head := fmt.Sprintf("  %s %s  %s:", bullet, Faint.Render(loc), Header.Render(first.Author))
+	head := fmt.Sprintf("  %s %s %s  %s:", bullet, chip, Faint.Render(loc), Header.Render(first.Author))
 	if t.IsResolved() {
 		head = Faint.Render(head)
 	}
@@ -389,6 +448,37 @@ func renderThread(t ado.Thread, expand bool, width int) string {
 		b.WriteString(renderCommentBody(sanitizeComment(c.Author, c.Content), width, bodyIndent))
 	}
 	return b.String()
+}
+
+// threadStatusChip renders the thread's lifecycle state as a colored
+// pill. Each status has its own bg-on-fg pair so the user can read
+// "what does this comment want from me" at a glance:
+//
+//	ACTIVE    yellow  — needs a response
+//	PENDING   cyan    — author working
+//	FIXED     green   — addressed and accepted
+//	WONTFIX   muted   — addressed and declined
+//	BYDESIGN  muted   — not a bug
+//	CLOSED    muted   — terminated without action
+//
+// Empty/unknown statuses fall back to a faint "?" chip so the gap is
+// surfaced rather than silently rendered as ACTIVE.
+func threadStatusChip(t ado.Thread) string {
+	switch strings.ToLower(t.Status) {
+	case "active":
+		return PillWarn.Render(" ACTIVE ")
+	case "pending":
+		return PillInfo.Render(" PENDING ")
+	case "fixed":
+		return PillGood.Render(" FIXED ")
+	case "wontfix":
+		return PillNeutral.Render(" WONTFIX ")
+	case "bydesign":
+		return PillNeutral.Render(" BYDESIGN ")
+	case "closed":
+		return PillNeutral.Render(" CLOSED ")
+	}
+	return Faint.Render(" ? ")
 }
 
 // wrapBodyLines renders a comment body across multiple lines.

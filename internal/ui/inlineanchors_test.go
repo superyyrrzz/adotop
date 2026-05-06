@@ -72,7 +72,7 @@ func TestSpliceInlineCommentsAttachesToTargetLine(t *testing.T) {
 		},
 	}}
 	byLine := inlineThreadsByLine(threads)
-	out := spliceInlineComments(rendered, lineNums, byLine, map[int]bool{}, 80, 0)
+	out, lineMap := spliceInlineComments(rendered, lineNums, byLine, map[int]bool{}, 80, 0)
 
 	plain := stripANSI(out)
 	if !strings.Contains(plain, "needs nil check") {
@@ -85,6 +85,11 @@ func TestSpliceInlineCommentsAttachesToTargetLine(t *testing.T) {
 	if !(idxLine2 < idxComment && idxComment < idxLine3) {
 		t.Fatalf("ordering wrong: line2=%d comment=%d line3=%d\n%s",
 			idxLine2, idxComment, idxLine3, plain)
+	}
+	// The map must report the line index where the inline thread was
+	// spliced — used by [/]'s scroll-into-view path.
+	if _, ok := lineMap[42]; !ok {
+		t.Fatalf("expected lineMap[42] to be set, got %v", lineMap)
 	}
 }
 
@@ -103,7 +108,7 @@ func TestSpliceInlineCommentsSkipsUnanchored(t *testing.T) {
 		Comments: []ado.Comment{{ID: 1, Author: "bob", Content: "file-level note"}},
 	}}
 	byLine := inlineThreadsByLine(threads)
-	out := spliceInlineComments(rendered, lineNums, byLine, map[int]bool{}, 80, 0)
+	out, _ := spliceInlineComments(rendered, lineNums, byLine, map[int]bool{}, 80, 0)
 	plain := stripANSI(out)
 	if strings.Contains(plain, "file-level note") {
 		t.Fatalf("unanchored thread should NOT inline-render:\n%s", plain)
