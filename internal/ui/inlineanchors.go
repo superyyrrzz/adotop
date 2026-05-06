@@ -171,11 +171,17 @@ func renderInlineThread(t ado.Thread, expand bool, width int, selected bool) str
 		if idx == 0 {
 			b.WriteString(connector)
 			if selected {
-				// Soft accent bg on the head row only — keeps the body
-				// legible (full-block bg would fight chroma colors) while
-				// producing a clear "you are here" rectangle that pairs
-				// with the thicker gutter.
-				ln = inlineSelectedHeadStyle().Render(ln)
+				// Full-row accent bg on the head: pad to pane width
+				// minus the gutter+connector we already wrote (≈7 cols)
+				// so the rectangle reads as a band rather than a chip
+				// hugging the text. inline pane width can be ≤ 0 in
+				// degenerate test cases — guard against that.
+				prefix := lipgloss.Width(gutter) + lipgloss.Width(connector)
+				w := width - prefix
+				if w < lipgloss.Width(ln) {
+					w = lipgloss.Width(ln)
+				}
+				ln = inlineSelectedHeadStyle().Width(w).Render(ln)
 			}
 		} else {
 			b.WriteString(wrapIndent[:3])
@@ -188,10 +194,14 @@ func renderInlineThread(t ado.Thread, expand bool, width int, selected bool) str
 
 // inlineSelectedHeadStyle returns the soft accent bg used to highlight
 // the selected inline thread's head row. Bg is the Cursor color at low
-// opacity (here approximated as the Overlay color which is already a
+// opacity (here approximated as the Surface0 color which is already a
 // muted accent in every theme); fg is the theme's normal foreground via
 // lipgloss inheritance — we don't override it so chips and chroma keep
 // their colors readable on top.
+//
+// Caller is responsible for stretching the style to a full-row width
+// via .Width(N) so the background reads as a band rather than a chip
+// that just hugs the text.
 func inlineSelectedHeadStyle() lipgloss.Style {
 	bg := lipgloss.AdaptiveColor{Light: "#dce0e8", Dark: "#313244"}
 	return lipgloss.NewStyle().Background(bg)
