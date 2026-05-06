@@ -70,6 +70,14 @@ type Theme struct {
 	// rendered code blocks and headings don't blast Mocha colors
 	// onto a Latte background.
 	GlamourStyle string
+
+	// ChromaStyle is the syntax-highlight style name passed to
+	// chroma when colorizing diff line content. Should match the
+	// theme palette so diff syntax tokens belong visually with the
+	// chrome — e.g. Catppuccin themes use "catppuccin-mocha"/
+	// "catppuccin-latte"; system themes fall back to "monokai" for
+	// dark and "monokailight" for light.
+	ChromaStyle string
 }
 
 // New resolves a Theme from an explicit override or terminal detection.

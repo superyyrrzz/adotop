@@ -26,6 +26,7 @@ type KeyMap struct {
 	ComposeThread          key.Binding
 	ReplyThread            key.Binding
 	DescModal              key.Binding
+	JumpToComments         key.Binding
 }
 
 func DefaultKeys() KeyMap {
@@ -64,5 +65,6 @@ func DefaultKeys() KeyMap {
 		ComposeThread: key.NewBinding(key.WithKeys("c")),
 		ReplyThread:   key.NewBinding(key.WithKeys("C")),
 		DescModal:     key.NewBinding(key.WithKeys("D")),
+		JumpToComments: key.NewBinding(key.WithKeys("J")),
 	}
 }

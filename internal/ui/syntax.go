@@ -15,8 +15,24 @@ import (
 var (
 	lexerCache   sync.Map // map[string]chroma.Lexer (nil when none matches)
 	highlighter  = formatters.Get("terminal256")
+
+	highlightMu  sync.RWMutex
 	highlightSty = styles.Get("monokai")
 )
+
+// SetSyntaxStyle swaps the active chroma style by name. Falls back to
+// monokai when the requested style isn't bundled. Safe to call from
+// applyStyles on theme switch — readers take a read lock per
+// HighlightLine call which is the hot path.
+func SetSyntaxStyle(name string) {
+	s := styles.Get(name)
+	if s == nil {
+		s = styles.Get("monokai")
+	}
+	highlightMu.Lock()
+	highlightSty = s
+	highlightMu.Unlock()
+}
 
 // HighlightLine tokenizes a single line of code from `path` and returns it
 // wrapped in ANSI escapes using the monokai theme. If no lexer matches the
@@ -37,7 +53,10 @@ func HighlightLine(path, code string) string {
 		return code
 	}
 	var buf bytes.Buffer
-	if err := highlighter.Format(&buf, highlightSty, it); err != nil {
+	highlightMu.RLock()
+	sty := highlightSty
+	highlightMu.RUnlock()
+	if err := highlighter.Format(&buf, sty, it); err != nil {
 		return code
 	}
 	out := buf.String()

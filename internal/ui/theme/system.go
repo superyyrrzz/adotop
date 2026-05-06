@@ -72,5 +72,6 @@ func newSystem() Theme {
 		// schemes are dark. Auto-detection lives in the "auto" path
 		// (Mocha/Latte) where we know the bg.
 		GlamourStyle: "dark",
+		ChromaStyle:  "monokai",
 	}
 }

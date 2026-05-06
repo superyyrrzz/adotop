@@ -38,5 +38,6 @@ func newCatppuccinLatte() Theme {
 		Info:       lipgloss.Color("#04a5e5"), // Sky
 		Identifier: lipgloss.Color("#1e66f5"), // Blue
 		GlamourStyle: "light",
+		ChromaStyle:  "catppuccin-latte",
 	}
 }

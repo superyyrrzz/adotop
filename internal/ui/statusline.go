@@ -202,7 +202,7 @@ func hintGroups(m Model) [][]segment {
 		//   view     — w/+/-:         display toggles (wrap, ctx)
 		//   chrome   — r/?/esc:       refresh, help, exit
 		nav := []string{"tab:focus", "enter:diff/expand", "n/N:file", "gg/G:top/end"}
-		threads := []string{"R:show-resolved"}
+		threads := []string{"R:show-resolved", "J:jump"}
 		if m.detailFocus == focusDiff {
 			threads = append(threads, "[/]:thread", "c:new", "C:reply", "x:resolve")
 		}
@@ -309,16 +309,35 @@ func joinHintGroups(groups [][]segment) string {
 
 // joinHintCluster renders the items in a cluster with a single space
 // between them — no chip bg, no divider — so the cluster reads as one
-// dense, scannable group.
+// dense, scannable group. Each hint is rendered two-tone: the key
+// glyph (text before the first ":") gets the bolder Cursor color so
+// the actionable bit pops, the label after gets the faint hintStyle
+// so it reads as supporting text. Items without a ":" are rendered
+// uniformly faint.
 func joinHintCluster(segs []segment) string {
 	if len(segs) == 0 {
 		return ""
 	}
 	parts := make([]string, len(segs))
 	for i, s := range segs {
-		parts[i] = s.style.Render(s.text)
+		parts[i] = renderHintTwoTone(s.text)
 	}
 	return strings.Join(parts, " ")
+}
+
+// renderHintTwoTone splits a "key:label" hint and renders the two
+// halves in distinct styles. The split is at the FIRST ":" only so
+// labels containing ":" (rare but possible) survive intact. Hints
+// without a ":" — like "press any key to dismiss" — fall through to
+// uniform faint rendering.
+func renderHintTwoTone(text string) string {
+	idx := strings.Index(text, ":")
+	if idx <= 0 || idx == len(text)-1 {
+		return hintStyle().Render(text)
+	}
+	key := text[:idx]
+	label := text[idx+1:]
+	return hintKeyStyle().Render(key) + hintStyle().Render(" "+label)
 }
 
 func joinSegments(segs []segment) string {
@@ -361,4 +380,13 @@ func wrapHint(m Model) string {
 // non-faint terminal themes.
 func hintStyle() lipgloss.Style {
 	return Faint
+}
+
+// hintKeyStyle paints the actionable key glyph in the Cursor accent
+// color so the eye lands on "what to press" first. Pairs with
+// hintStyle for the descriptive label half. No bg fill so it stays
+// inline with the surrounding faint text rather than reading as a
+// chip.
+func hintKeyStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(Cursor.GetForeground()).Bold(true)
 }

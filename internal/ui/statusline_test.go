@@ -58,14 +58,15 @@ func TestStatuslineDropsHintsOnNarrowWidth(t *testing.T) {
 
 // Comment-action hints are diff-focus-only. In files focus the bar
 // shouldn't waste width advertising c/C/x/[/] — those keys are no-ops
-// there. In diff focus they should appear.
+// there. In diff focus they should appear. Hints render two-tone
+// today ("c new" not "c:new"), so the assertion uses the rendered form.
 func TestStatuslineCommentHintsOnlyInDiffFocus(t *testing.T) {
 	m := newDetailModel(t)
 	m.width = 300 // wide enough that no hints get dropped
 
 	// Files focus: comment hints absent.
 	filesBar := renderStatusline(m)
-	for _, h := range []string{"c:new", "C:reply", "x:resolve", "[/]:thread"} {
+	for _, h := range []string{"c new", "C reply", "x resolve", "[/] thread"} {
 		if strings.Contains(filesBar, h) {
 			t.Fatalf("files focus should not surface %q in hints, got: %s", h, filesBar)
 		}
@@ -74,7 +75,7 @@ func TestStatuslineCommentHintsOnlyInDiffFocus(t *testing.T) {
 	// Diff focus: comment hints present.
 	m.detailFocus = focusDiff
 	diffBar := renderStatusline(m)
-	for _, h := range []string{"c:new", "C:reply", "x:resolve", "[/]:thread"} {
+	for _, h := range []string{"c new", "C reply", "x resolve", "[/] thread"} {
 		if !strings.Contains(diffBar, h) {
 			t.Fatalf("diff focus should surface %q in hints, got: %s", h, diffBar)
 		}

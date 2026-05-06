@@ -898,25 +898,39 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// the model unchanged).
 		m = m.openDescModal()
 		return m, nil
+	case keyMatches(msg, m.keys.JumpToComments):
+		// J jumps the diff viewport to the comments block on the
+		// selected file. Two side effects, both in service of "land on
+		// something readable":
+		//
+		//  1. If the file's only comments are resolved AND the show-
+		//     resolved filter is off, flip it on first — otherwise J
+		//     would land on "(no open comments on this file)" which
+		//     defeats the point.
+		//  2. Expand all visible threads, so the viewport opens at the
+		//     full content rather than headlines the user must Enter
+		//     to expand.
+		if f, ok := m.detail.SelectedFile(); ok {
+			if !m.showResolved && !hasAnyOpenForFile(m.threads, f.Path) && hasAnyResolvedForFile(m.threads, f.Path) {
+				m.showResolved = true
+				m.detail = m.detail.SetPRThreads(m.threads, m.showResolved)
+				m = m.refreshPreview()
+			}
+			m, _ = m.expandThreadsForFile(f.Path)
+			m = m.refreshPreview()
+		}
+		m = m.scrollPreviewToComments()
+		return m, nil
 	case keyMatches(msg, m.keys.ShowResolved):
+		// R is a pure filter toggle — flip showResolved and rebuild
+		// the preview so resolved threads appear/disappear in place.
+		// Earlier this key also expanded threads and scrolled to the
+		// comments block on the SHOW direction, but that conflated
+		// "filter" with "navigate" — J now owns the navigate role, so
+		// R can be the single-purpose toggle its label promises.
 		m.showResolved = !m.showResolved
 		m.detail = m.detail.SetPRThreads(m.threads, m.showResolved)
 		m = m.refreshPreview()
-		// On the SHOW direction, treat R as "I want to read these":
-		// expand all threads on the focused file AND scroll to them.
-		// Saves the user a redundant Enter + PageDown after every R.
-		// Expand BEFORE the second refresh so the rebuilt viewport
-		// reflects the expanded state, then jump the offset past the
-		// max — viewport.SetYOffset clamps to maxYOffset so we land
-		// at the tail (where the comments live) regardless of body
-		// height.
-		if m.showResolved {
-			if f, ok := m.detail.SelectedFile(); ok {
-				m, _ = m.expandThreadsForFile(f.Path)
-			}
-			m = m.refreshPreview()
-			m.preview.vp.SetYOffset(1 << 30)
-		}
 		return m, nil
 	case keyMatches(msg, m.keys.NextThread):
 		if m.detailFocus != focusDiff {
@@ -1143,6 +1157,7 @@ func (m Model) View() string {
 			"  x           toggle resolve/reactivate selected thread (Diff focus)",
 			"  R           toggle showing resolved comments",
 			"  D           open full PR description in scrollable modal",
+			"  J           jump to comments block on this file (expands all)",
 			"  esc         back",
 		}, "\n"))
 	}
@@ -1444,6 +1459,19 @@ func (m Model) stickyResolvedBand() string {
 func hasAnyResolvedForFile(all []ado.Thread, path string) bool {
 	for _, t := range all {
 		if t.FilePath == path && t.IsResolved() {
+			return true
+		}
+	}
+	return false
+}
+
+// hasAnyOpenForFile is the inverse predicate, used by the J handler to
+// decide whether jumping to the comments block would land the user on
+// "(no open comments on this file)" — in which case J should flip the
+// showResolved filter on so there's something to read.
+func hasAnyOpenForFile(all []ado.Thread, path string) bool {
+	for _, t := range all {
+		if t.FilePath == path && !t.IsResolved() {
 			return true
 		}
 	}

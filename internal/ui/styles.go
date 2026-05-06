@@ -88,4 +88,10 @@ func applyStyles(t theme.Theme) {
 	glamourStyleSpec = glamourStyleJSON(t)
 	glamourCache = map[glamourCacheKey]*glamour.TermRenderer{}
 	glamourMu.Unlock()
+
+	// Diff syntax highlighting: same idea — chroma's hardcoded "monokai"
+	// fights with the rest of the theme. Point it at the theme-named
+	// chroma style so + / - line content uses the same palette as the
+	// chrome around it.
+	SetSyntaxStyle(t.ChromaStyle)
 }
