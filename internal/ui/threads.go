@@ -9,6 +9,51 @@ import (
 	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
+// prLevelThreads returns PR-level (unanchored) threads — those with no
+// FilePath — applying the showResolved filter and dropping pure-noise
+// system threads (status == "" AND every comment is commentType=system).
+// Those are auto-generated audit entries (policy updates, branch ref
+// updates, abandon notifications) that carry no review signal and would
+// otherwise dominate the Discussion list. System bots that file an
+// *actionable* thread (e.g., GitOps, AI reviewers) get a real Status
+// and survive the filter.
+func (m Model) prLevelThreads() []ado.Thread {
+	out := make([]ado.Thread, 0, len(m.threads))
+	for _, t := range m.threads {
+		if t.FilePath != "" {
+			continue
+		}
+		if !m.showResolved && t.IsResolved() {
+			continue
+		}
+		if isSystemNoiseThread(t) {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// isSystemNoiseThread reports whether a thread is a pure ADO audit
+// entry (policy/branch/abandon notification) rather than a review
+// comment. Empty status + all comments tagged "system" is the precise
+// signal — real bots/humans either set a status or post text-typed
+// comments.
+func isSystemNoiseThread(t ado.Thread) bool {
+	if t.Status != "" {
+		return false
+	}
+	if len(t.Comments) == 0 {
+		return true
+	}
+	for _, c := range t.Comments {
+		if !strings.EqualFold(c.Type, "system") {
+			return false
+		}
+	}
+	return true
+}
+
 // threadsForFile returns threads attached to the given file path, applying
 // the showResolved filter. Threads not anchored to a file (PR-level) are
 // returned only when path == "".
@@ -131,6 +176,17 @@ func (m Model) toggleThreadsForFile(path string) (Model, bool) {
 //  3. Optionally wrap long diff lines if the user toggled wrap.
 //  4. Append the file-level footer block for unanchored threads.
 func (m Model) refreshPreview() Model {
+	if m.detail.IsDiscussionSelected() {
+		threads := m.prLevelThreads()
+		selected := 0
+		if m.prThreadCursor >= 0 && m.prThreadCursor < len(threads) {
+			selected = threads[m.prThreadCursor].ID
+		}
+		body, lineMap := renderDiscussionPane(threads, m.expandedThread, m.preview.vp.Width, selected)
+		m.inlineThreadLines = lineMap
+		m.preview.vp.SetContent(body)
+		return m
+	}
 	if m.previewKey == "" {
 		return m
 	}
@@ -176,7 +232,7 @@ func (m Model) refreshPreview() Model {
 // in the inline map (e.g., the file has no preview yet, or the thread
 // was filtered out by showResolved between cursor-move and refresh).
 func (m Model) scrollPreviewToSelectedThread() Model {
-	if m.previewKey == "" {
+	if m.previewKey == "" && !m.detail.IsDiscussionSelected() {
 		return m
 	}
 	id := m.currentThreadID()

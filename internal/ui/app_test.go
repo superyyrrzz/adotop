@@ -135,6 +135,7 @@ func newTestModel() Model {
 		previewCache:   newDiffBodyCache(5),
 		expandedThread: map[int]bool{},
 		threadCursor:   map[string]int{},
+		prThreadCursor: -1,
 	}
 }
 

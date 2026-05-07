@@ -213,3 +213,47 @@ func inlineSelectedHeadStyle() lipgloss.Style {
 func fmtLineLabel(n int) string {
 	return fmt.Sprintf("ln %d", n)
 }
+
+// renderDiscussionPane renders the PR-level (unanchored) thread list
+// for display in the preview pane when the synthetic Discussion entry
+// is selected in the file list. Mirrors the inline-thread treatment so
+// the user gets a consistent experience: chips on each thread, expand
+// state via Enter, and a full-row mauve bg + ▌ gutter on the selected
+// thread.
+//
+// Returns the rendered body AND a map of thread ID → 0-based output
+// line index where each thread starts. Caller uses the map to scroll
+// the viewport so the selected thread is in view after [/].
+func renderDiscussionPane(threads []ado.Thread, expanded map[int]bool, width, selectedID int) (string, map[int]int) {
+	threadLines := map[int]int{}
+	if len(threads) == 0 {
+		return Faint.Render("  (no PR-level discussion)") + "\n", threadLines
+	}
+	pos := 0
+	for i, t := range threads {
+		if t.ID == selectedID {
+			pos = i + 1 // 1-based for human readability
+			break
+		}
+	}
+	header := fmt.Sprintf("─ Discussion  (%d) ", len(threads))
+	if pos > 0 {
+		// Append a [i/N] indicator so the user knows where the cursor
+		// sits in the list — otherwise threads buried at index 4-of-6
+		// look identical to "no thread selected" except for the ▌
+		// gutter, which is easy to miss in a long list.
+		header += fmt.Sprintf("[%d/%d] ", pos, len(threads))
+	}
+	rendered := Faint.Render(header)
+	var b strings.Builder
+	b.WriteString(rendered)
+	b.WriteString("\n")
+	out := strings.Count(rendered, "\n") + 1
+	for _, t := range threads {
+		threadLines[t.ID] = out
+		block := renderInlineThread(t, expanded[t.ID], width, selectedID == t.ID)
+		b.WriteString(block)
+		out += strings.Count(block, "\n")
+	}
+	return b.String(), threadLines
+}

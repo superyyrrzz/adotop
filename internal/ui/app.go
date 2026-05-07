@@ -87,6 +87,11 @@ type Model struct {
 	// Absent or out-of-range == no thread selected; the user must press
 	// [/] to land on a thread before C/x become meaningful.
 	threadCursor map[string]int
+	// prThreadCursor is the active index into the PR-level (unanchored)
+	// thread list, used when the synthetic Discussion entry is selected
+	// in the file list. Negative = unset (first [/] press lands on 0).
+	// Single int (no map) since there's only one PR per detail screen.
+	prThreadCursor int
 	// inlineThreadLines maps a thread ID to the 0-based line index in
 	// the spliced preview body where that thread starts. Populated by
 	// refreshPreview after every inline splice; consumed by the cursor-
@@ -162,6 +167,7 @@ func New(cfg config.Config, client *ado.Client) Model {
 		previewCache:  newDiffBodyCache(5),
 		expandedThread: map[int]bool{},
 		threadCursor:   map[string]int{},
+		prThreadCursor: -1,
 	}
 	st, err := cache.New()
 	if err != nil {
@@ -773,6 +779,7 @@ func (m Model) openDetail(s ado.PRSummary) (Model, tea.Cmd) {
 	m.threads = nil
 	m.expandedThread = map[int]bool{}
 	m.threadCursor = map[string]int{}
+	m.prThreadCursor = -1
 	m.screen = screenDetail
 	// NOTE: previewCache survives PR re-open so bouncing list↔detail
 	// stays snappy. Refresh (R) explicitly clears the current PR below.
@@ -938,7 +945,7 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.refreshPreview()
 		return m, nil
 	case keyMatches(msg, m.keys.NextThread):
-		if m.detailFocus != focusDiff {
+		if !m.threadKeysActive() {
 			return m, nil
 		}
 		m = m.moveThreadCursor(+1)
@@ -946,7 +953,7 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.scrollPreviewToSelectedThread()
 		return m, nil
 	case keyMatches(msg, m.keys.PrevThread):
-		if m.detailFocus != focusDiff {
+		if !m.threadKeysActive() {
 			return m, nil
 		}
 		m = m.moveThreadCursor(-1)
@@ -954,17 +961,17 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.scrollPreviewToSelectedThread()
 		return m, nil
 	case keyMatches(msg, m.keys.ToggleResolve):
-		if m.detailFocus != focusDiff {
+		if !m.threadKeysActive() {
 			return m, nil
 		}
 		return m, m.toggleResolveCurrentThread()
 	case keyMatches(msg, m.keys.ComposeThread):
-		if m.detailFocus != focusDiff {
+		if !m.threadKeysActive() {
 			return m, nil
 		}
 		return m, m.composeNewThreadCmd()
 	case keyMatches(msg, m.keys.ReplyThread):
-		if m.detailFocus != focusDiff {
+		if !m.threadKeysActive() {
 			return m, nil
 		}
 		return m, m.composeReplyCmd()
@@ -998,9 +1005,23 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		// Files focus: enter drills into the diff for the selected file.
-		// Mirrors the "enter to open" idiom from the PR list. tab still
-		// works as the symmetric focus toggle for users who learned it.
+		if m.detail.IsDiscussionSelected() {
+			// Files focus + Discussion selected: enter toggles the
+			// currently-selected PR thread's expand state. Mirrors the
+			// per-file enter behavior so the same key reads as "open
+			// the thing under the cursor" everywhere.
+			tid := m.currentThreadID()
+			if tid != 0 {
+				m.expandedThread[tid] = !m.expandedThread[tid]
+				m = m.refreshPreview()
+				m = m.scrollPreviewToSelectedThread()
+			}
+			return m, nil
+		}
+		// Files focus + file selected: enter drills into the diff for
+		// the selected file. Mirrors the "enter to open" idiom from the
+		// PR list. tab still works as the symmetric focus toggle for
+		// users who learned it.
 		m.detailFocus = focusDiff
 		return m, nil
 	case keyMatches(msg, m.keys.Abandon):
@@ -1023,7 +1044,7 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.detail.cursor = next
-		mm, previewCmd := m.queuePreviewForSelection()
+		mm, previewCmd := m.syncPreviewForSelection()
 		return mm, previewCmd
 	case keyMatches(msg, m.keys.PrevFile):
 		prev := m.detail.neighborFile(-1)
@@ -1031,7 +1052,7 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.detail.cursor = prev
-		mm, previewCmd := m.queuePreviewForSelection()
+		mm, previewCmd := m.syncPreviewForSelection()
 		return mm, previewCmd
 	}
 	if m.detailFocus == focusDiff {
@@ -1039,12 +1060,16 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.preview, cmd = m.preview.Update(msg)
 		return m, cmd
 	}
+	beforeDisc := m.detail.IsDiscussionSelected()
 	before, beforeOK := m.detail.SelectedFile()
 	var cmd tea.Cmd
 	m.detail, cmd = m.detail.Update(msg)
 	after, afterOK := m.detail.SelectedFile()
-	if afterOK && (!beforeOK || before.Path != after.Path) {
-		m, previewCmd := m.queuePreviewForSelection()
+	afterDisc := m.detail.IsDiscussionSelected()
+	cursorChanged := afterDisc != beforeDisc ||
+		(afterOK && (!beforeOK || before.Path != after.Path))
+	if cursorChanged {
+		m, previewCmd := m.syncPreviewForSelection()
 		return m, tea.Batch(cmd, previewCmd)
 	}
 	return m, cmd
@@ -1201,6 +1226,30 @@ func (m Model) cycleDiffCtx(forward bool) (Model, tea.Cmd) {
 		m.diffCtx = prevCtx(m.diffCtx)
 	}
 	m.previewKey = ""
+	return m.queuePreviewForSelection()
+}
+
+// syncPreviewForSelection refreshes the preview pane after the file-
+// list cursor moves. Three cases:
+//  1. Discussion entry selected → render PR threads into the viewport
+//     (no diff fetch needed).
+//  2. Real file selected → delegate to queuePreviewForSelection (cache
+//     hit or async fetch as before).
+//  3. No selection (empty file list) → no-op.
+//
+// Also clears previewKey when leaving a file → Discussion so the next
+// file selection re-queues a fetch instead of treating the cached key
+// as still-current.
+func (m Model) syncPreviewForSelection() (Model, tea.Cmd) {
+	if m.detail.IsDiscussionSelected() {
+		if m.previewKey != "" {
+			m.scrollMem[m.previewKey] = m.preview.vp.YOffset
+			m.previewKey = ""
+		}
+		m = m.refreshPreview()
+		m.preview.vp.GotoTop()
+		return m, nil
+	}
 	return m.queuePreviewForSelection()
 }
 

@@ -12,12 +12,36 @@ import (
 	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
+// threadKeysActive reports whether thread-action keys ([/], c, C, x)
+// should fire in the current focus + selection. Active in Diff focus
+// (where the cursor walks file-anchored threads) and in Files focus
+// when the synthetic Discussion entry is selected (where the cursor
+// walks PR-level threads). Both routes converge on currentThreadID,
+// so the action handlers don't need to branch.
+func (m Model) threadKeysActive() bool {
+	if m.detailFocus == focusDiff {
+		return true
+	}
+	return m.detail.IsDiscussionSelected()
+}
+
 // currentThreadID returns the ADO thread ID currently under the cursor on
 // the focused file, or 0 when no thread is selected (cursor unset, no
 // threads on file, or threads list is empty). Callers use 0 as the
 // "nothing selected → no-op" sentinel; the C/x action keys check this
 // before dispatching.
 func (m Model) currentThreadID() int {
+	if m.detail.IsDiscussionSelected() {
+		threads := m.prLevelThreads()
+		if len(threads) == 0 {
+			return 0
+		}
+		idx := m.prThreadCursor
+		if idx < 0 || idx >= len(threads) {
+			return 0
+		}
+		return threads[idx].ID
+	}
 	f, ok := m.detail.SelectedFile()
 	if !ok {
 		return 0
@@ -38,6 +62,25 @@ func (m Model) currentThreadID() int {
 // "next thread" from no-selection means the first thread. Subsequent
 // calls clamp at both ends; no wraparound, so holding ] doesn't surprise.
 func (m Model) moveThreadCursor(delta int) Model {
+	if m.detail.IsDiscussionSelected() {
+		threads := m.prLevelThreads()
+		if len(threads) == 0 {
+			return m
+		}
+		if m.prThreadCursor < 0 {
+			m.prThreadCursor = 0
+			return m
+		}
+		idx := m.prThreadCursor + delta
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(threads) {
+			idx = len(threads) - 1
+		}
+		m.prThreadCursor = idx
+		return m
+	}
 	f, ok := m.detail.SelectedFile()
 	if !ok {
 		return m

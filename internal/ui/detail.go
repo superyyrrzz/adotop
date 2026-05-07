@@ -90,6 +90,9 @@ func (m DetailModel) SetPRThreads(all []ado.Thread, includeResolved bool) Detail
 			continue
 		}
 		if t.FilePath == "" {
+			if isSystemNoiseThread(t) {
+				continue
+			}
 			out = append(out, t)
 			continue
 		}
@@ -154,10 +157,51 @@ func (m DetailModel) SelectedFile() (ado.FileChange, bool) {
 	if len(m.files) == 0 {
 		return ado.FileChange{}, false
 	}
+	if m.cursor < 0 {
+		// Sentinel rows (Discussion = -2). The diff/preview/prefetch path
+		// treats "no selected file" as a no-op, which is exactly what we
+		// want — the preview pane is repurposed by the parent Model.
+		return ado.FileChange{}, false
+	}
 	if m.cursor >= len(m.files) {
 		return m.files[len(m.files)-1], true
 	}
 	return m.files[m.cursor], true
+}
+
+// discussionRowIdx is the sentinel cursor value for the synthetic
+// Discussion entry that appears at the top of the file list when the PR
+// has unanchored threads. Negative so it can never collide with a real
+// file index, and distinct from -1 (which we already use elsewhere as a
+// "not found" return).
+const discussionRowIdx = -2
+
+// IsDiscussionSelected reports whether the file-list cursor is parked
+// on the synthetic Discussion row. The parent Model uses this to swap
+// the preview pane's contents (PR threads instead of diff body) and to
+// route [/] to the PR-thread cursor.
+func (m DetailModel) IsDiscussionSelected() bool {
+	return m.cursor == discussionRowIdx && len(m.prThreads) > 0
+}
+
+// HasDiscussion reports whether the synthetic Discussion entry should
+// appear in the file list (i.e., the PR has at least one unanchored
+// thread that survives the showResolved filter).
+func (m DetailModel) HasDiscussion() bool {
+	return len(m.prThreads) > 0
+}
+
+// PRThreadCount is exposed so the file-list label can show "(N)" next
+// to the Discussion entry without the parent reaching into prThreads.
+func (m DetailModel) PRThreadCount() int { return len(m.prThreads) }
+
+// SelectDiscussion moves the cursor to the synthetic Discussion row.
+// No-op when there are no PR-level threads (the row isn't rendered).
+func (m DetailModel) SelectDiscussion() DetailModel {
+	if len(m.prThreads) > 0 {
+		m.cursor = discussionRowIdx
+	}
+	return m
 }
 
 func (m DetailModel) Summary() ado.PRSummary { return m.summary }
@@ -251,23 +295,33 @@ func lastPath(files []ado.FileChange) string {
 	return files[len(files)-1].Path
 }
 
+// displayOrder returns the cursor-walkable rows in display order. The
+// synthetic Discussion sentinel (idx == discussionRowIdx) is prepended
+// when the PR has unanchored threads so j/k cycle through it alongside
+// real files. Directory headers are skipped — they aren't selectable.
+func (m DetailModel) displayOrder() []int {
+	rows := m.fileTree()
+	out := make([]int, 0, len(m.files)+1)
+	if m.HasDiscussion() {
+		out = append(out, discussionRowIdx)
+	}
+	for _, r := range rows {
+		if !r.isDir {
+			out = append(out, r.fileIdx)
+		}
+	}
+	return out
+}
+
 // neighborFile returns the file index that comes after (delta=+1) or
 // before (delta=-1) the current cursor when files are walked in
 // **display order** (the sorted/grouped tree). This keeps j/k in sync
 // with what the user sees instead of the original API order.
 func (m DetailModel) neighborFile(delta int) int {
-	if len(m.files) == 0 {
+	order := m.displayOrder()
+	if len(order) == 0 {
 		return m.cursor
 	}
-	rows := m.fileTree()
-	// Collect file rows in display order.
-	order := make([]int, 0, len(m.files))
-	for _, r := range rows {
-		if !r.isDir {
-			order = append(order, r.fileIdx)
-		}
-	}
-	// Find current cursor position in display order.
 	pos := 0
 	for i, idx := range order {
 		if idx == m.cursor {
@@ -294,13 +348,7 @@ func (m DetailModel) DisplayNeighbors(radius int) []int {
 	if radius <= 0 || len(m.files) == 0 {
 		return nil
 	}
-	rows := m.fileTree()
-	order := make([]int, 0, len(m.files))
-	for _, r := range rows {
-		if !r.isDir {
-			order = append(order, r.fileIdx)
-		}
-	}
+	order := m.displayOrder()
 	pos := 0
 	for i, idx := range order {
 		if idx == m.cursor {
@@ -310,10 +358,10 @@ func (m DetailModel) DisplayNeighbors(radius int) []int {
 	}
 	out := make([]int, 0, 2*radius)
 	for d := 1; d <= radius; d++ {
-		if pos-d >= 0 {
+		if pos-d >= 0 && order[pos-d] >= 0 {
 			out = append(out, order[pos-d])
 		}
-		if pos+d < len(order) {
+		if pos+d < len(order) && order[pos+d] >= 0 {
 			out = append(out, order[pos+d])
 		}
 	}
@@ -326,25 +374,21 @@ func (m DetailModel) View() string { return m.ViewWithFocus(true) }
 // (sorted-tree) order, or -1 when there are no files. Used by gg in
 // the Files pane to jump the cursor to the top of the list.
 func (m DetailModel) FirstDisplayFile() int {
-	rows := m.fileTree()
-	for _, r := range rows {
-		if !r.isDir {
-			return r.fileIdx
-		}
+	order := m.displayOrder()
+	if len(order) == 0 {
+		return -1
 	}
-	return -1
+	return order[0]
 }
 
 // LastDisplayFile is the symmetric helper for G — returns the file
 // index of the last file in display order, or -1 when empty.
 func (m DetailModel) LastDisplayFile() int {
-	rows := m.fileTree()
-	for i := len(rows) - 1; i >= 0; i-- {
-		if !rows[i].isDir {
-			return rows[i].fileIdx
-		}
+	order := m.displayOrder()
+	if len(order) == 0 {
+		return -1
 	}
-	return -1
+	return order[len(order)-1]
 }
 
 func (m DetailModel) FilesHeader(focused bool) string {
@@ -470,9 +514,6 @@ func (m DetailModel) renderHeader(focused bool) string {
 	if block := renderStatusBlock(m.statuses); block != "" {
 		b.WriteString(block)
 	}
-	if block := renderPRDiscussion(m.prThreads); block != "" {
-		b.WriteString(block)
-	}
 	b.WriteString("\n" + m.FilesHeader(focused) + "\n")
 	if m.loadErr != "" {
 		b.WriteString(ErrLine.Render(m.loadErr) + "\n")
@@ -487,6 +528,20 @@ func (m DetailModel) renderHeader(focused bool) string {
 // top of the pane.
 func (m DetailModel) renderFilesBlock(_ bool, headerLines int) string {
 	var b strings.Builder
+	if m.HasDiscussion() {
+		// Synthetic Discussion entry — sits above the file tree, never
+		// scrolls out (it's a fixed top row). Selection mirrors how a
+		// file row looks so the user reads it as "one of the navigable
+		// items," not chrome.
+		marker := "  "
+		label := fmt.Sprintf("💬 Discussion  (%d)", m.PRThreadCount())
+		line := marker + label
+		if m.cursor == discussionRowIdx {
+			line = "▸ " + label
+			line = Selected.Render(line)
+		}
+		b.WriteString(line + "\n")
+	}
 	rows := m.fileTree()
 	cursorRow := rowIndexForFile(rows, m.cursor)
 	start, end := m.rowWindowFitting(rows, cursorRow, headerLines)
