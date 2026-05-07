@@ -329,13 +329,13 @@ func (m DetailModel) neighborFile(delta int) int {
 			break
 		}
 	}
-	pos += delta
-	if pos < 0 {
-		pos = 0
-	}
-	if pos >= len(order) {
-		pos = len(order) - 1
-	}
+	// Wrap around in either direction so j at the bottom returns to the
+	// top (and k at the top jumps to the bottom). Lets the user cycle
+	// through a small file list without lifting their fingers off j/k —
+	// the file pane is short enough that the wrap is obvious from the
+	// visible window jumping, not disorienting.
+	n := len(order)
+	pos = ((pos+delta)%n + n) % n
 	return order[pos]
 }
 

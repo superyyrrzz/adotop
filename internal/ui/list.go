@@ -195,12 +195,13 @@ func (m ListModel) Update(msg tea.Msg) (ListModel, tea.Cmd) {
 			return m, tabSwitchCmd(m.tab)
 		case keyMatches(msg, m.keys.Down):
 			rows := m.visible()
-			if m.cursor < len(rows)-1 {
-				m.cursor++
+			if len(rows) > 0 {
+				m.cursor = (m.cursor + 1) % len(rows)
 			}
 		case keyMatches(msg, m.keys.Up):
-			if m.cursor > 0 {
-				m.cursor--
+			rows := m.visible()
+			if len(rows) > 0 {
+				m.cursor = (m.cursor - 1 + len(rows)) % len(rows)
 			}
 		case keyMatches(msg, m.keys.Filter):
 			m.filtering = true
