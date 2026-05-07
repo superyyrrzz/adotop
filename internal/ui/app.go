@@ -989,6 +989,20 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyMatches(msg, m.keys.CtxMore), keyMatches(msg, m.keys.CtxLess):
 		return m.cycleDiffCtx(keyMatches(msg, m.keys.CtxMore))
 	case keyMatches(msg, m.keys.Open):
+		if m.detail.IsDiscussionSelected() {
+			// Discussion selected: enter toggles the currently-selected
+			// PR thread's expand state. Works in BOTH Files and Diff
+			// focus — when the user has dropped into Diff focus to read
+			// the pane, requiring them to tab back to Files just to
+			// expand a comment is friction without payoff.
+			tid := m.currentThreadID()
+			if tid != 0 {
+				m.expandedThread[tid] = !m.expandedThread[tid]
+				m = m.refreshPreview()
+				m = m.scrollPreviewToSelectedThread()
+			}
+			return m, nil
+		}
 		if m.detailFocus == focusDiff {
 			// Toggle expansion of every (visible) thread on the focused file.
 			f, ok := m.detail.SelectedFile()
@@ -1002,19 +1016,6 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if expanded {
 					m = m.scrollPreviewToComments()
 				}
-			}
-			return m, nil
-		}
-		if m.detail.IsDiscussionSelected() {
-			// Files focus + Discussion selected: enter toggles the
-			// currently-selected PR thread's expand state. Mirrors the
-			// per-file enter behavior so the same key reads as "open
-			// the thing under the cursor" everywhere.
-			tid := m.currentThreadID()
-			if tid != 0 {
-				m.expandedThread[tid] = !m.expandedThread[tid]
-				m = m.refreshPreview()
-				m = m.scrollPreviewToSelectedThread()
 			}
 			return m, nil
 		}

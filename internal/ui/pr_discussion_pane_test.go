@@ -117,6 +117,30 @@ func TestDiscussionPaneRendersThreadsWithSelection(t *testing.T) {
 	}
 }
 
+// TestEnterTogglesPRThreadExpandFromDiffFocus: when the user has
+// focused into Diff to read the Discussion pane, enter must still
+// toggle the selected PR thread. Previously the Open handler routed
+// Diff focus to toggleThreadsForFile, which no-ops when no file is
+// selected (Discussion sentinel makes SelectedFile return false), so
+// enter looked dead.
+func TestEnterTogglesPRThreadExpandFromDiffFocus(t *testing.T) {
+	m := newDetailModel(t)
+	m = seedPRThreads(m)
+	m.preview = m.preview.SetSize(60, 20)
+	m.detail = m.detail.SelectDiscussion()
+	m.prThreadCursor = 0 // cursor on thread 11
+	m.detailFocus = focusDiff
+
+	if m.expandedThread[11] {
+		t.Fatalf("expandedThread[11]=true before enter; expected false")
+	}
+	mm, _ := m.updateDetailScreen(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mm.(Model)
+	if !m.expandedThread[11] {
+		t.Fatalf("expandedThread[11]=false after enter in Diff focus; expected true")
+	}
+}
+
 // TestEnterTogglesPRThreadExpand: in Files focus + Discussion selected,
 // pressing enter on the cursor's PR thread flips its expandedThread
 // entry — same contract as enter on a file's threads in Diff focus.
