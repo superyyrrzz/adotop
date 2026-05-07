@@ -136,6 +136,28 @@ type Model struct {
 	// descModal holds the scrollable PR-description overlay state.
 	// nil == closed. Populated by D in detail screen.
 	descModal *descModalState
+
+	// recentsRefresh tracks the in-flight serial sweep that re-fetches
+	// open PRs on the Recents tab so stale row data (votes, status,
+	// merge state) gets refreshed without the user having to enter
+	// each PR. queue holds the IDs left to refresh in order; lastAt
+	// records when each PR was successfully refreshed in this session,
+	// used to pick the oldest-refreshed PR first on the next sweep.
+	// Both reset when the app exits — we don't persist refresh times.
+	recentsRefresh recentsRefreshState
+}
+
+// recentsRefreshState is the in-flight queue + per-PR last-refreshed
+// timestamps that drive the background recents sweep. Kept on Model so
+// it survives between key handlers without globals.
+type recentsRefreshState struct {
+	queue  []int
+	lastAt map[int]time.Time
+	// inFlight is true while the sweep has work in progress. Used to
+	// gate spinner ticks (no need to schedule frames when idle) and to
+	// prevent re-entrant kickoffs (R while a sweep is already running
+	// just no-ops; the user can wait for the in-flight sweep).
+	inFlight bool
 }
 
 // pendingAction is a destructive operation awaiting y/n confirmation.
@@ -504,6 +526,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		cmds := []tea.Cmd{m.loadList(m.list.Tab())}
+		if m.list.Tab() == ado.TabRecents {
+			cmds = append(cmds, startRecentsRefreshSweep())
+		}
 		if m.initialPRID != 0 {
 			prID := m.initialPRID
 			m.initialPRID = 0
@@ -532,7 +557,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, tick(m.cfg.RefreshInterval.Duration))
 		return m, tea.Batch(cmds...)
 	case tabSwitchedMsg:
-		return m, m.loadList(msg.Tab)
+		var cmds []tea.Cmd
+		cmds = append(cmds, m.loadList(msg.Tab))
+		if msg.Tab == ado.TabRecents {
+			// Switching to Recents triggers a background re-fetch of
+			// open PRs so stale rows (votes / status / merge state)
+			// catch up without the user opening each one.
+			cmds = append(cmds, startRecentsRefreshSweep())
+		}
+		return m, tea.Batch(cmds...)
+	case recentsRefreshKickoffMsg:
+		mm, cmd := m.kickRecentsRefresh()
+		return mm, cmd
+	case prRefreshedMsg:
+		mm, cmd := m.handlePRRefreshed(msg)
+		return mm, cmd
+	case recentsRefreshTickMsg:
+		// Keep ticking only while a sweep is in flight — avoid burning
+		// frames on an idle terminal.
+		if !m.list.IsRefreshing() {
+			return m, nil
+		}
+		m.list = m.list.AdvanceRefreshFrame()
+		return m, recentsRefreshTick()
 	case prsLoadedMsg:
 		if msg.err == nil && m.cache != nil && m.cfg.Org != "" && m.cfg.Project != "" && msg.tab != ado.TabRecents {
 			if err := m.cache.SaveList(m.cfg.Org, m.cfg.Project, msg.tab, msg.prs); err != nil {
@@ -813,7 +860,15 @@ func (m Model) updateListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return mm, cmd
 		}
 	case keyMatches(msg, m.keys.Refresh):
-		return m, m.loadList(m.list.Tab())
+		cmds := []tea.Cmd{m.loadList(m.list.Tab())}
+		if m.list.Tab() == ado.TabRecents {
+			// R on the Recents tab also re-runs the background sweep
+			// so the user can force a re-fetch when something looks
+			// stale. Idempotent — kickRecentsRefresh no-ops when a
+			// sweep is already running.
+			cmds = append(cmds, startRecentsRefreshSweep())
+		}
+		return m, tea.Batch(cmds...)
 	case keyMatches(msg, m.keys.Browser):
 		if s, ok := m.list.Selected(); ok {
 			if s.URL == "" {

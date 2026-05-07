@@ -31,6 +31,13 @@ type ListModel struct {
 	loadErr   string
 	jumping   bool
 	jumpInput string
+	// refreshingPRID is the PR ID currently being re-fetched by the
+	// background recents-refresh sweep, or 0 when idle. Used by the
+	// row renderer to draw a small spinner glyph next to the row.
+	refreshingPRID int
+	// refreshFrame ticks while the spinner is animating; modulo
+	// len(refreshSpinnerFrames) selects the glyph.
+	refreshFrame int
 }
 
 func NewList(keys KeyMap) ListModel {
@@ -140,6 +147,30 @@ func keyMatches(msg tea.KeyMsg, b interface{ Keys() []string }) bool {
 	}
 	return false
 }
+
+// refreshSpinnerFrames are the glyph cycle for the inline "this row is
+// being refreshed" indicator. Braille spinners read as motion in
+// monospace terminals without taking more than one column of space.
+var refreshSpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// SetRefreshing marks one row as actively being re-fetched (or clears
+// the marker when prID is 0). Caller drives refreshFrame via Tick to
+// animate; SetRefreshing alone is enough to make the glyph appear.
+func (m ListModel) SetRefreshing(prID int) ListModel {
+	m.refreshingPRID = prID
+	return m
+}
+
+// AdvanceRefreshFrame bumps the spinner animation index. Called from
+// the parent on each spinner tick.
+func (m ListModel) AdvanceRefreshFrame() ListModel {
+	m.refreshFrame++
+	return m
+}
+
+// IsRefreshing reports whether a sweep is in flight, so the parent can
+// decide whether to keep ticking the spinner.
+func (m ListModel) IsRefreshing() bool { return m.refreshingPRID != 0 }
 
 // UpdatePR finds rows matching s.ID across every tab and replaces them
 // with s. Used when fresh data arrives via the detail view (votes,
@@ -392,6 +423,17 @@ func (m ListModel) View() string {
 			pad := stateColWidth - lipgloss.Width(pill)
 			if pad > 0 {
 				pill += strings.Repeat(" ", pad)
+			}
+			// Spinner glyph for the row currently being refreshed by the
+			// background sweep — sits in the trailing pad of the state
+			// column so it doesn't shift the rest of the columns. When
+			// idle we leave the pad blank.
+			if p.ID == m.refreshingPRID && m.refreshingPRID != 0 {
+				glyph := refreshSpinnerFrames[m.refreshFrame%len(refreshSpinnerFrames)]
+				pill = strings.TrimRight(pill, " ") + " " + Faint.Render(glyph)
+				if w := lipgloss.Width(pill); w < stateColWidth {
+					pill += strings.Repeat(" ", stateColWidth-w)
+				}
 			}
 			line := fmt.Sprintf("%s %s %s %s %s → %s   %s",
 				padCols(fmt.Sprintf("#%d", p.ID), cols.id),
