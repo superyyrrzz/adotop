@@ -10,22 +10,40 @@ import (
 	"time"
 
 	"github.com/superyyrrzz/adotop/internal/ado"
+	"github.com/superyyrrzz/adotop/internal/config"
 )
 
-// TestLivePR1145087HeaderVisible fetches a real PR and verifies that the
-// always-visible header (repo line, title, reviewer panel) survives at
-// every common pane geometry.
+// TestLivePRHeaderVisible fetches a real PR and verifies that the
+// always-visible header (repo line, title, reviewer panel) survives
+// at every common pane geometry.
+//
+// The PR is read from your local ~/.adotop/config.toml so each
+// contributor can point the suite at something their account can
+// access. Set:
+//
+//	org              = "your-org"
+//	project          = "your-project"
+//	pr_id_for_live_test = 12345  # any PR you can read
 //
 // Run with:
 //
-//	go test -tags=live -run TestLivePR1145087HeaderVisible ./internal/ui
-func TestLivePR1145087HeaderVisible(t *testing.T) {
+//	go test -tags=live -run TestLivePRHeaderVisible ./internal/ui
+func TestLivePRHeaderVisible(t *testing.T) {
+	cfg, _, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	if cfg.Org == "" || cfg.PRIDForLiveTest == 0 {
+		t.Skip("set org and pr_id_for_live_test in ~/.adotop/config.toml to run live tests")
+	}
+
 	tokens := ado.NewAzCLITokenProvider()
-	c := ado.NewClient("ceapex", tokens)
+	c := ado.NewClient(cfg.Org, tokens)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	d, err := c.GetPullRequestByID(ctx, 1145087, "")
+	prID := cfg.PRIDForLiveTest
+	d, err := c.GetPullRequestByID(ctx, prID, "")
 	if err != nil {
 		t.Fatalf("GetPullRequestByID: %v", err)
 	}
@@ -33,7 +51,7 @@ func TestLivePR1145087HeaderVisible(t *testing.T) {
 		d.ID, d.Repo, d.Title, len(d.DescriptionMD),
 		strings.Count(d.DescriptionMD, "\n")+1)
 
-	files, err := c.GetIterationChanges(ctx, d.RepoID, 1145087)
+	files, err := c.GetIterationChanges(ctx, d.RepoID, prID)
 	if err != nil {
 		t.Logf("GetIterationChanges err (non-fatal): %v", err)
 	}

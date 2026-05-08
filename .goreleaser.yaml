@@ -1,0 +1,74 @@
+# GoReleaser config for adotop. Build prebuilt binaries on tag push.
+#
+# Trigger: `git tag v0.1.0 && git push --tags` and the
+# .github/workflows/release.yml workflow drives goreleaser to attach
+# artifacts to a GitHub Release. No manual binary uploads needed.
+#
+# Test locally without publishing:
+#   goreleaser release --snapshot --clean
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: adotop
+    main: ./cmd/adotop
+    binary: adotop
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Trim path info for reproducibility; embed version + commit so
+    # `adotop --version` (when added) reports the right release.
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    # Windows ships as .zip — that's the conventional Windows archive.
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - 'merge conflict'
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch

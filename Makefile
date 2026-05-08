@@ -8,11 +8,12 @@ build:
 test:
 	$(GO) test ./...
 
-# Live tests hit a real Azure DevOps PR (#1145087) across the canonical
-# pane geometry matrix. Requires az login. Run before declaring a "PR
-# view" bug fixed.
+# Live tests hit a real Azure DevOps PR across the canonical pane
+# geometry matrix. Requires az login AND a PR ID set in
+# ~/.adotop/config.toml (pr_id_for_live_test). Run before declaring a
+# "PR view" bug fixed.
 test-live:
-	$(GO) test -tags=live -run TestLivePR1145087HeaderVisible -v ./internal/ui
+	$(GO) test -tags=live -run TestLivePRHeaderVisible -v ./internal/ui
 
 tidy:
 	$(GO) mod tidy

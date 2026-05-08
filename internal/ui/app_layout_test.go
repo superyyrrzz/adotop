@@ -30,8 +30,8 @@ func TestAppViewKeepsTopbarVisibleForTallList(t *testing.T) {
 	for _, h := range []int{20, 30, 50, 80} {
 		t.Run("h"+itoa(h), func(t *testing.T) {
 			m := newTestModel()
-			m.cfg = config.Config{Org: "ceapex", Project: "Engineering"}
-			m.user = "renzeyu"
+			m.cfg = config.Config{Org: "acme", Project: "Platform"}
+			m.user = "alice"
 			mm, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: h})
 			m = mm.(Model)
 			mm, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: manyPRs(50)})
@@ -42,7 +42,7 @@ func TestAppViewKeepsTopbarVisibleForTallList(t *testing.T) {
 			if len(lines) == 0 {
 				t.Fatalf("empty View")
 			}
-			if !strings.Contains(lines[0], "ceapex") {
+			if !strings.Contains(lines[0], "acme") {
 				t.Fatalf("h=%d: topbar must be the first line; got first line=%q\nfull:\n%s", h, lines[0], out)
 			}
 			if got := lipgloss.Height(out); got > h {

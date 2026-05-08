@@ -170,7 +170,7 @@ func TestStatuslineMenuModeReplacesContext(t *testing.T) {
 // like the topbar breadcrumb, must use Tab.Short().
 func TestStatuslineUsesShortTabLabel(t *testing.T) {
 	m := newTestModel()
-	m.cfg = config.Config{Org: "ceapex", Project: "Engineering"}
+	m.cfg = config.Config{Org: "acme", Project: "Platform"}
 	m.width = 200
 
 	for i := 0; i < 3; i++ {

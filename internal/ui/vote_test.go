@@ -68,7 +68,7 @@ func TestVoteMenuUnknownKeyClosesWithoutAction(t *testing.T) {
 func TestActionDoneOptimisticallyUpdatesMyVote(t *testing.T) {
 	m := newDetailModel(t)
 	m.myID = "me-uuid"
-	m.user = "Renze Yu"
+	m.user = "Alice Anderson"
 	prID := m.detail.Summary().ID
 	if m.detail.Summary().MyVote != 0 {
 		t.Fatalf("setup: MyVote should start 0")

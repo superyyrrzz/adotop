@@ -39,7 +39,7 @@ func TestListPullRequestsAssignedTab(t *testing.T) {
 
 	c := NewClient("ignored", &fakeTokens{})
 	c.BaseURL = srv.URL
-	prs, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Engineering", Tab: TabAssigned, MyID: "me-uuid"})
+	prs, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Platform", Tab: TabAssigned, MyID: "me-uuid"})
 	if err != nil {
 		t.Fatalf("ListPullRequests: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestListPullRequestsAssignedTab(t *testing.T) {
 		t.Fatalf("reviewers: %+v", prs[0].Reviewers)
 	}
 
-	if !strings.Contains(gotPath, "/Engineering/_apis/git/pullrequests") {
+	if !strings.Contains(gotPath, "/Platform/_apis/git/pullrequests") {
 		t.Fatalf("path = %q", gotPath)
 	}
 	q, _ := url.ParseQuery(gotQuery)
@@ -77,7 +77,7 @@ func TestListPullRequestsCreatedTab(t *testing.T) {
 	defer srv.Close()
 	c := NewClient("ignored", &fakeTokens{})
 	c.BaseURL = srv.URL
-	if _, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Engineering", Tab: TabCreated, MyID: "me-uuid"}); err != nil {
+	if _, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Platform", Tab: TabCreated, MyID: "me-uuid"}); err != nil {
 		t.Fatal(err)
 	}
 	q, _ := url.ParseQuery(gotQuery)
@@ -105,7 +105,7 @@ func TestListPullRequestsAssignedFiltersUnvotedClientSide(t *testing.T) {
 	defer srv.Close()
 	c := NewClient("ignored", &fakeTokens{})
 	c.BaseURL = srv.URL
-	prs, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Engineering", Tab: TabAssigned, MyID: "me-uuid"})
+	prs, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Platform", Tab: TabAssigned, MyID: "me-uuid"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestListPullRequestsAllReviewingKeepsVoted(t *testing.T) {
 	defer srv.Close()
 	c := NewClient("ignored", &fakeTokens{})
 	c.BaseURL = srv.URL
-	prs, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Engineering", Tab: TabReviewRequested, MyID: "me-uuid"})
+	prs, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Platform", Tab: TabReviewRequested, MyID: "me-uuid"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestGetPullRequestByIDHitsOrgScopedPath(t *testing.T) {
 			"repository": map[string]any{
 				"id":      "repo-uuid",
 				"name":    "MyRepo",
-				"project": map[string]any{"name": "Engineering"},
+				"project": map[string]any{"name": "Platform"},
 			},
 			"lastMergeSourceCommit": map[string]any{"commitId": "src"},
 			"lastMergeTargetCommit": map[string]any{"commitId": "tgt"},
@@ -310,7 +310,7 @@ func TestListPullRequestsSynthesizesURLWhenLinksMissing(t *testing.T) {
 					"repository": map[string]any{
 						"id":      "repo-uuid",
 						"name":    "MyRepo",
-						"project": map[string]any{"name": "Engineering"},
+						"project": map[string]any{"name": "Platform"},
 					},
 				},
 			},
@@ -318,9 +318,9 @@ func TestListPullRequestsSynthesizesURLWhenLinksMissing(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient("ceapex", &fakeTokens{})
+	c := NewClient("acme", &fakeTokens{})
 	c.BaseURL = srv.URL
-	prs, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Engineering", Tab: TabCreated, MyID: "me"})
+	prs, err := c.ListPullRequests(context.Background(), ListPRFilter{Project: "Platform", Tab: TabCreated, MyID: "me"})
 	if err != nil {
 		t.Fatalf("ListPullRequests: %v", err)
 	}

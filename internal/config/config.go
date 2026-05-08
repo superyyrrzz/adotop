@@ -17,6 +17,12 @@ type Config struct {
 	RefreshInterval Duration          `toml:"refresh_interval"`
 	RepoRoots       []string          `toml:"repo_roots"`
 	Keybindings     map[string]string `toml:"keybindings"`
+	// PRIDForLiveTest, when non-zero, names the PR that the
+	// build-tagged live tests under internal/ui/...live_test.go
+	// should target. Lets each contributor point the test suite at
+	// a PR their account can actually read, instead of hardcoding
+	// an ID that's only meaningful to one tenant.
+	PRIDForLiveTest int `toml:"pr_id_for_live_test"`
 }
 
 type Duration struct{ time.Duration }

@@ -30,8 +30,8 @@ func TestLoadParses(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p, []byte(`org = "ceapex"
-project = "Engineering"
+	if err := os.WriteFile(p, []byte(`org = "acme"
+project = "Platform"
 refresh_interval = "30s"
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -40,7 +40,7 @@ refresh_interval = "30s"
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Org != "ceapex" || cfg.Project != "Engineering" {
+	if cfg.Org != "acme" || cfg.Project != "Platform" {
 		t.Fatalf("unexpected cfg: %+v", cfg)
 	}
 	if cfg.RefreshInterval.Duration.Seconds() != 30 {
@@ -55,8 +55,8 @@ func TestLoadRepoRoots(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p, []byte(`org = "ceapex"
-project = "Engineering"
+	if err := os.WriteFile(p, []byte(`org = "acme"
+project = "Platform"
 repo_roots = ["~/git", "~/src"]
 `), 0o644); err != nil {
 		t.Fatal(err)

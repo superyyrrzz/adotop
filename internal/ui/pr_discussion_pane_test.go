@@ -236,7 +236,7 @@ func TestDiscussionFiltersSystemNoise(t *testing.T) {
 		}},
 		// Real human comment — must survive.
 		{ID: 3, FilePath: "", Status: "active", Comments: []ado.Comment{
-			{Author: "Renze Yu", Content: "thoughts here", Type: "text"},
+			{Author: "Alice Anderson", Content: "thoughts here", Type: "text"},
 		}},
 		// System bot with an actionable status — must survive too.
 		{ID: 4, FilePath: "", Status: "active", Comments: []ado.Comment{

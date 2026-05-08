@@ -47,13 +47,17 @@ inside a 40-col pane.
 
 ### 4. Keep the live test honest
 
-`internal/ui/detail_live_test.go` (build tag `live`) hits real PR
-#1145087 across the geometry matrix. Run it before declaring any
-"PR view" bug fixed:
+`internal/ui/detail_live_test.go` (build tag `live`) hits a real PR
+across the geometry matrix. Run it before declaring any "PR view" bug
+fixed:
 
 ```sh
 make test-live
 ```
+
+The live test reads `org`/`project` and a `pr_id_for_live_test` from
+your local `~/.adotop/config.toml`. Make sure those point at a PR
+your `az login` identity can read before running the suite.
 
 ### 5. New invariants go in a helper
 
@@ -68,5 +72,6 @@ Do NOT push to remote unless explicitly asked. Local commits only.
 
 ## Azure DevOps
 
-Use the ADO MCP server. Default org `ceapex`, project `Engineering`.
-Never WebFetch ADO URLs.
+Use the ADO MCP server when available. Default org/project come from
+the user's `~/.adotop/config.toml` — don't hardcode tenant-specific
+values into tests or doc comments. Never WebFetch ADO URLs.

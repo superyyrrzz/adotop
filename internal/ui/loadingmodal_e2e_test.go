@@ -20,7 +20,7 @@ import (
 // If any link in the chain breaks, the user sees the bare list flash
 // just like before. This test catches that without needing a terminal.
 func TestURLLaunchModalAppearsBeforeJumpResolves(t *testing.T) {
-	cfg := config.Config{Org: "ceapex", Project: "Engineering"}
+	cfg := config.Config{Org: "acme", Project: "Platform"}
 	m := New(cfg, nil)
 	m.initialPRID = 1145743
 	// Window-size pass first so list/detail compute their inner sizes
@@ -54,7 +54,7 @@ func TestURLLaunchModalAppearsBeforeJumpResolves(t *testing.T) {
 // then 0, so the original height computation collapses to 0 and the
 // modal lands inside a 0-row body — invisible.
 func TestURLLaunchModalBeforeWindowSize(t *testing.T) {
-	cfg := config.Config{Org: "ceapex", Project: "Engineering"}
+	cfg := config.Config{Org: "acme", Project: "Platform"}
 	m := New(cfg, nil)
 	m.initialPRID = 999
 	cd := &ado.ConnectionData{}

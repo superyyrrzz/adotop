@@ -17,12 +17,12 @@ import (
 // to the left as static context.
 func TestTopbarShowsCrumbsForListScreen(t *testing.T) {
 	m := newTestModel()
-	m.cfg = config.Config{Org: "ceapex", Project: "Engineering"}
+	m.cfg = config.Config{Org: "acme", Project: "Platform"}
 	m.width = 120
 
 	out := renderTopbar(m)
 
-	for _, want := range []string{"ceapex", "Engineering", "Recents"} {
+	for _, want := range []string{"acme", "Platform", "Recents"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("topbar missing crumb %q:\n%s", want, out)
 		}
@@ -37,7 +37,7 @@ func TestTopbarShowsCrumbsForListScreen(t *testing.T) {
 // include the tab name in the trail to keep the bar short.
 func TestTopbarShowsPRIDOnDetailScreen(t *testing.T) {
 	m := newDetailModel(t)
-	m.cfg = config.Config{Org: "ceapex", Project: "Engineering"}
+	m.cfg = config.Config{Org: "acme", Project: "Platform"}
 	m.width = 120
 
 	out := renderTopbar(m)
@@ -53,7 +53,7 @@ func TestTopbarShowsPRIDOnDetailScreen(t *testing.T) {
 // strip. Each rendered line must be <= terminal width at every size.
 func TestTopbarFitsWithinWidth(t *testing.T) {
 	m := newTestModel()
-	m.cfg = config.Config{Org: "ceapex", Project: "Engineering"}
+	m.cfg = config.Config{Org: "acme", Project: "Platform"}
 
 	for _, w := range []int{20, 30, 40, 60, 80, 120, 200} {
 		m.width = w
@@ -85,11 +85,11 @@ func TestTopbarCrumbsTruncateLeadingFirst(t *testing.T) {
 // only identity is asserted.
 func TestTopbarRightZoneCarriesIdentity(t *testing.T) {
 	m := newTestModel()
-	m.user = "renzeyu"
+	m.user = "alice"
 	m.width = 120
 
 	out := renderTopbar(m)
-	if !strings.Contains(out, "renzeyu") {
+	if !strings.Contains(out, "alice") {
 		t.Fatalf("topbar should show identity on the right:\n%s", out)
 	}
 }
@@ -116,8 +116,8 @@ func TestTopbarHandlesMissingOrgProject(t *testing.T) {
 // Asserts both: the long form does not appear, AND the short form does.
 func TestTopbarUsesShortTabLabelInBreadcrumb(t *testing.T) {
 	m := newTestModel()
-	m.cfg = config.Config{Org: "ceapex", Project: "Engineering"}
-	m.user = "renzeyu"
+	m.cfg = config.Config{Org: "acme", Project: "Platform"}
+	m.user = "alice"
 	m.width = 120
 
 	// Switch to the All-reviewing tab.

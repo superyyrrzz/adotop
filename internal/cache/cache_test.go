@@ -28,11 +28,11 @@ func TestIdentityRoundTrip(t *testing.T) {
 	if _, ok := s.LoadIdentity(); ok {
 		t.Fatal("expected miss on empty cache")
 	}
-	if err := s.SaveIdentity("uid-1", "Renze Yu"); err != nil {
+	if err := s.SaveIdentity("uid-1", "Alice Anderson"); err != nil {
 		t.Fatal(err)
 	}
 	got, ok := s.LoadIdentity()
-	if !ok || got.UserID != "uid-1" || got.DisplayName != "Renze Yu" {
+	if !ok || got.UserID != "uid-1" || got.DisplayName != "Alice Anderson" {
 		t.Fatalf("LoadIdentity = %+v ok=%v", got, ok)
 	}
 }
@@ -40,13 +40,13 @@ func TestIdentityRoundTrip(t *testing.T) {
 func TestListRoundTripPerTab(t *testing.T) {
 	s := newTestStore(t)
 	prs := []ado.PRSummary{{ID: 1, Title: "x"}, {ID: 2, Title: "y"}}
-	if err := s.SaveList("ceapex", "Engineering", ado.TabAssigned, prs); err != nil {
+	if err := s.SaveList("acme", "Platform", ado.TabAssigned, prs); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := s.LoadList("ceapex", "Engineering", ado.TabCreated); ok {
+	if _, ok := s.LoadList("acme", "Platform", ado.TabCreated); ok {
 		t.Fatal("Created tab should miss when only Assigned was written")
 	}
-	got, ok := s.LoadList("ceapex", "Engineering", ado.TabAssigned)
+	got, ok := s.LoadList("acme", "Platform", ado.TabAssigned)
 	if !ok || len(got) != 2 || got[0].ID != 1 {
 		t.Fatalf("LoadList = %+v ok=%v", got, ok)
 	}

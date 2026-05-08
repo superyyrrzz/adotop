@@ -18,10 +18,10 @@ func TestFindMatchesByRemote(t *testing.T) {
 	root := t.TempDir()
 	repo := filepath.Join(root, "MyRepo")
 	mustRun(t, "", "git", "init", "-b", "main", repo)
-	mustRun(t, repo, "git", "remote", "add", "origin", "https://dev.azure.com/ceapex/Engineering/_git/MyRepo")
+	mustRun(t, repo, "git", "remote", "add", "origin", "https://dev.azure.com/acme/Platform/_git/MyRepo")
 
 	f := New([]string{root})
-	got, ok := f.Find("MyRepo", "ceapex")
+	got, ok := f.Find("MyRepo", "acme")
 	if !ok {
 		t.Fatal("expected to find MyRepo")
 	}
@@ -38,7 +38,7 @@ func TestFindRejectsWrongRemote(t *testing.T) {
 	mustRun(t, repo, "git", "remote", "add", "origin", "https://github.com/x/MyRepo")
 
 	f := New([]string{root})
-	if _, ok := f.Find("MyRepo", "ceapex"); ok {
+	if _, ok := f.Find("MyRepo", "acme"); ok {
 		t.Fatal("expected no match — remote points elsewhere")
 	}
 }
@@ -48,14 +48,14 @@ func TestFindCachesLookup(t *testing.T) {
 	root := t.TempDir()
 	repo := filepath.Join(root, "MyRepo")
 	mustRun(t, "", "git", "init", "-b", "main", repo)
-	mustRun(t, repo, "git", "remote", "add", "origin", "https://dev.azure.com/ceapex/_git/MyRepo")
+	mustRun(t, repo, "git", "remote", "add", "origin", "https://dev.azure.com/acme/_git/MyRepo")
 
 	f := New([]string{root})
-	if _, ok := f.Find("MyRepo", "ceapex"); !ok {
+	if _, ok := f.Find("MyRepo", "acme"); !ok {
 		t.Fatal("first lookup failed")
 	}
 	mustRun(t, repo, "git", "remote", "remove", "origin")
-	got, ok := f.Find("MyRepo", "ceapex")
+	got, ok := f.Find("MyRepo", "acme")
 	if !ok || got != repo {
 		t.Fatalf("cached lookup lost: ok=%v got=%q", ok, got)
 	}
