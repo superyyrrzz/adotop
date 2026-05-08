@@ -20,6 +20,11 @@ import (
 type composeModalState struct {
 	ta             textarea.Model
 	targetThreadID int
+	// targetFilePath, when non-empty, anchors a new thread to this
+	// file. Mutually exclusive with targetThreadID (replies don't
+	// re-anchor — they inherit the parent thread's anchor). Empty
+	// means PR-level. Line-level isn't supported yet.
+	targetFilePath string
 	// kind is "new" or "reply" — used for the modal title and the
 	// editor-seed comment when the user escapes out to $EDITOR via
 	// ctrl+e. The success message (notes on actionDoneMsg) is built
@@ -30,15 +35,53 @@ type composeModalState struct {
 // composeModalOpen reports whether the compose overlay is up.
 func (m Model) composeModalOpen() bool { return m.composeModal != nil }
 
-// openComposeNewModal opens the modal in "new PR-level thread" mode.
+// openComposeNewModal opens the modal for a new thread. Routing is
+// implicit:
+//   * Discussion entry selected → PR-level thread.
+//   * A real file selected      → file-level thread on that file.
+// Line-level isn't supported yet — there's no per-line cursor on the
+// diff viewport, and a typed-in line-number prompt would be brittle
+// across hunked diffs. Until that's designed, file-level is the
+// finest granularity for new threads.
+//
 // Cursor focus shifts to the textarea immediately so the user can
 // start typing without an extra keypress.
 func (m Model) openComposeNewModal() Model {
+	target := composeNewTarget(m)
 	ta := newComposeTextarea(composeModalInnerSize(m.width, m.height))
-	ta.Placeholder = "Type your comment. ctrl+s to send · ctrl+e to open $EDITOR · esc to cancel"
+	ta.Placeholder = composePlaceholderFor(target)
 	ta.Focus()
-	m.composeModal = &composeModalState{ta: ta, kind: "new"}
+	m.composeModal = &composeModalState{
+		ta:             ta,
+		kind:           "new",
+		targetFilePath: target,
+	}
 	return m
+}
+
+// composeNewTarget picks the file path the new thread should anchor
+// to (or "" for PR-level). Looks at the detail-screen selection:
+// Discussion sentinel → PR-level; any real file → that file's path.
+func composeNewTarget(m Model) string {
+	if m.detail.IsDiscussionSelected() {
+		return ""
+	}
+	if f, ok := m.detail.SelectedFile(); ok {
+		return f.Path
+	}
+	return ""
+}
+
+// composePlaceholderFor builds the textarea placeholder so the user
+// reads the routing target as soon as the modal opens. We surface
+// the path in full — truncating it would obscure exactly the
+// information the user needs to confirm the target.
+func composePlaceholderFor(filePath string) string {
+	const tail = " ctrl+s to send · ctrl+e to open $EDITOR · esc to cancel"
+	if filePath == "" {
+		return "Type your PR-level comment." + tail
+	}
+	return "Type your file-level comment on " + filePath + "." + tail
 }
 
 // openComposeReplyModal opens the modal in "reply to thread N" mode.
@@ -80,6 +123,7 @@ func (m Model) updateComposeModal(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyCtrlS:
 		body := strings.TrimSpace(st.ta.Value())
 		target := st.targetThreadID
+		filePath := st.targetFilePath
 		m = m.closeComposeModal()
 		if body == "" {
 			return m, nil
@@ -87,17 +131,18 @@ func (m Model) updateComposeModal(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if target != 0 {
 			return m, m.postReplyCmd(target, body)
 		}
-		return m, m.postNewThreadCmd(body)
+		return m, m.postNewThreadCmd(body, filePath)
 	case tea.KeyCtrlE:
 		// Escape hatch for long prose — drop the current buffer into
 		// $EDITOR. We reuse the existing tea.ExecProcess path so the
 		// result lands on composeResultMsg like before. Close the
 		// modal first so we don't try to render it underneath the
 		// suspended TUI.
-		seed := buildEditorSeed(st.kind, st.targetThreadID, st.ta.Value())
+		seed := buildEditorSeed(st.kind, st.targetThreadID, st.targetFilePath, st.ta.Value())
 		target := st.targetThreadID
+		filePath := st.targetFilePath
 		m = m.closeComposeModal()
-		return m, openEditorWithSeed(seed, target)
+		return m, openEditorWithSeed(seed, target, filePath)
 	}
 	var cmd tea.Cmd
 	st.ta, cmd = st.ta.Update(msg)
@@ -114,8 +159,11 @@ func (m Model) renderComposeModal() string {
 	}
 	st := m.composeModal
 	titleText := "New PR Comment"
-	if st.kind == "reply" {
+	switch {
+	case st.kind == "reply":
 		titleText = fmt.Sprintf("Reply to Thread #%d", st.targetThreadID)
+	case st.targetFilePath != "":
+		titleText = "New Comment on " + st.targetFilePath
 	}
 	title := lipgloss.NewStyle().Bold(true).Foreground(Cursor.GetForeground()).Render(titleText)
 	hint := Faint.Render("ctrl+s send · ctrl+e $EDITOR · esc cancel · enter newline")
@@ -187,11 +235,17 @@ func composeModalInnerSize(termW, termH int) (int, int) {
 // buildEditorSeed produces the initial file contents handed to
 // $EDITOR when the user uses ctrl+e to escape out of the in-TUI
 // modal. We preserve the textarea buffer below the seed comment so
-// nothing is lost in the handoff.
-func buildEditorSeed(kind string, targetThreadID int, current string) string {
-	header := "<!-- Comment will be posted as a new PR-level thread. Save empty to cancel. -->\n\n"
-	if kind == "reply" && targetThreadID != 0 {
+// nothing is lost in the handoff. The seed mirrors the modal title:
+// reply, file-level, or PR-level.
+func buildEditorSeed(kind string, targetThreadID int, targetFilePath, current string) string {
+	var header string
+	switch {
+	case kind == "reply" && targetThreadID != 0:
 		header = fmt.Sprintf("<!-- Reply to thread #%d. Save empty to cancel. -->\n\n", targetThreadID)
+	case targetFilePath != "":
+		header = fmt.Sprintf("<!-- Comment will be posted on %s. Save empty to cancel. -->\n\n", targetFilePath)
+	default:
+		header = "<!-- Comment will be posted as a new PR-level thread. Save empty to cancel. -->\n\n"
 	}
 	return header + current
 }
@@ -200,26 +254,35 @@ func buildEditorSeed(kind string, targetThreadID int, current string) string {
 // the TUI via tea.ExecProcess, and returns a composeResultMsg with
 // the edited body — same shape the legacy compose*Cmd helpers used,
 // so the result lands on the existing composeResultMsg handler.
-func openEditorWithSeed(seed string, targetThreadID int) tea.Cmd {
+func openEditorWithSeed(seed string, targetThreadID int, targetFilePath string) tea.Cmd {
 	tmpPath, err := writeSeedFile(seed)
 	if err != nil {
-		return func() tea.Msg { return composeResultMsg{targetThreadID: targetThreadID, err: err} }
+		return func() tea.Msg {
+			return composeResultMsg{targetThreadID: targetThreadID, targetFilePath: targetFilePath, err: err}
+		}
 	}
 	cmd, err := buildEditorCmd(resolveEditor(), tmpPath)
 	if err != nil {
 		os.Remove(tmpPath)
-		return func() tea.Msg { return composeResultMsg{targetThreadID: targetThreadID, err: err} }
+		return func() tea.Msg {
+			return composeResultMsg{targetThreadID: targetThreadID, targetFilePath: targetFilePath, err: err}
+		}
 	}
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		if err != nil {
 			os.Remove(tmpPath)
-			return composeResultMsg{targetThreadID: targetThreadID, err: err}
+			return composeResultMsg{targetThreadID: targetThreadID, targetFilePath: targetFilePath, err: err}
 		}
 		b, readErr := os.ReadFile(tmpPath)
 		if readErr != nil {
 			os.Remove(tmpPath)
-			return composeResultMsg{targetThreadID: targetThreadID, err: readErr}
+			return composeResultMsg{targetThreadID: targetThreadID, targetFilePath: targetFilePath, err: readErr}
 		}
-		return composeResultMsg{body: trimSeedAndComments(string(b)), targetThreadID: targetThreadID, tmpPath: tmpPath}
+		return composeResultMsg{
+			body:           trimSeedAndComments(string(b)),
+			targetThreadID: targetThreadID,
+			targetFilePath: targetFilePath,
+			tmpPath:        tmpPath,
+		}
 	})
 }

@@ -77,16 +77,18 @@ func TestComposeModalCtrlSEmptyBufferNoops(t *testing.T) {
 }
 
 // TestComposeModalRendersOverlay: with the modal open, the rendered
-// View must contain the modal title and hint footer. Confirms the
-// overlay path is wired so the user actually sees the compose UI
-// (not just state on the model that never paints).
+// View must contain a modal title and the hint footer. The exact
+// title varies with selection (file-level vs PR-level routing); we
+// just assert the "New" prefix common to all new-thread modes. This
+// confirms the overlay path is wired so the user actually sees the
+// compose UI (not just state on the model that never paints).
 func TestComposeModalRendersOverlay(t *testing.T) {
 	m := newDetailModel(t)
 	m.detailFocus = focusDiff
 	m.width, m.height = 120, 40
 	m = m.openComposeNewModal()
 	out := stripANSI(m.View())
-	if !strings.Contains(out, "New PR Comment") {
+	if !strings.Contains(out, "New ") {
 		t.Fatalf("compose modal title missing from rendered View:\n%s", out)
 	}
 	if !strings.Contains(out, "ctrl+s") {
@@ -112,5 +114,43 @@ func TestComposeModalSwallowsKeysAndBlocksUnderlyingScreen(t *testing.T) {
 	}
 	if !m.composeModalOpen() {
 		t.Fatalf("q during compose modal should keep the modal open")
+	}
+}
+
+// TestComposeNewTargetRoutesToSelectedFile: when a real file is
+// selected (default cursor on the first file), opening the modal
+// must anchor the new thread to that file's path. The modal title
+// surfaces the path so the user sees the routing target before
+// typing.
+func TestComposeNewTargetRoutesToSelectedFile(t *testing.T) {
+	m := newDetailModel(t)
+	m.detailFocus = focusDiff
+	m.width, m.height = 120, 40
+	m = m.openComposeNewModal()
+	if m.composeModal.targetFilePath != "/a.go" {
+		t.Fatalf("targetFilePath=%q, want /a.go", m.composeModal.targetFilePath)
+	}
+	out := stripANSI(m.View())
+	if !strings.Contains(out, "/a.go") {
+		t.Fatalf("modal title should surface the file path:\n%s", out)
+	}
+}
+
+// TestComposeNewTargetRoutesToPRWhenDiscussionSelected: with the
+// synthetic Discussion entry selected, the modal must route to a
+// PR-level thread (empty file path) — same as before file-level
+// routing existed.
+func TestComposeNewTargetRoutesToPRWhenDiscussionSelected(t *testing.T) {
+	m := newDetailModel(t)
+	m = seedPRThreads(m)
+	m.detail = m.detail.SelectDiscussion()
+	m.width, m.height = 120, 40
+	m = m.openComposeNewModal()
+	if m.composeModal.targetFilePath != "" {
+		t.Fatalf("Discussion selection should produce PR-level target, got file=%q", m.composeModal.targetFilePath)
+	}
+	out := stripANSI(m.View())
+	if !strings.Contains(out, "New PR Comment") {
+		t.Fatalf("modal title should read 'New PR Comment' for PR-level routing:\n%s", out)
 	}
 }

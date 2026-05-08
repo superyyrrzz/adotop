@@ -703,7 +703,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.targetThreadID != 0 {
 			return m, m.postReplyCmd(msg.targetThreadID, msg.body)
 		}
-		return m, m.postNewThreadCmd(msg.body)
+		return m, m.postNewThreadCmd(msg.body, msg.targetFilePath)
 	case actionDoneMsg:
 		if msg.err != nil {
 			// File-only log: the footer banner is transient so an
