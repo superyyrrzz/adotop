@@ -183,6 +183,11 @@ func contextSegments(m Model) []segment {
 // Drop strategy when the line overflows: clusters fall off the tail as
 // a unit, never split mid-cluster — splitting would defeat the whole
 // point of grouping.
+//
+// Hints are context-aware: only show what's actionable in the current
+// state. The full reference lives in `?` (help). The goal is "every
+// hint here is something you might press right now" — not a wall of
+// 30 keys for a new user to memorize.
 func hintGroups(m Model) [][]segment {
 	if m.voteMenu || m.pendingAction.kind != "" {
 		return nil
@@ -193,31 +198,62 @@ func hintGroups(m Model) [][]segment {
 	var groups [][]string
 	switch m.screen {
 	case screenList:
-		groups = [][]string{
-			{"/:filter", "#:goto"},                  // search
-			{"enter:open", "o:browser"},             // open
-			{"tab:next"},                            // nav
-			{"r:refresh"},                           // refresh
-			{"?:help", "q:quit"},                    // chrome
+		hasRows := m.list.Rows() > 0
+		_, hasSel := m.list.Selected()
+		nav := []string{"j/k:move", "enter:open"}
+		if hasRows {
+			nav = append(nav, "/:filter", "#:goto")
 		}
+		groups = append(groups, nav)
+		groups = append(groups, []string{"tab:next-tab"})
+		if hasSel {
+			groups = append(groups, []string{"o:browser"})
+		}
+		groups = append(groups, []string{"?:help", "q:quit"})
 	case screenDetail:
-		// Cluster vocabulary:
-		//   nav      — tab/n/N/gg/G:  move within the detail screen
-		//   threads  — R/[/]/c/C/x:   work on review threads (diff focus only)
-		//   actions  — a/v/X:         vote / abandon (PR-level state changes)
-		//   open     — o:             external link
-		//   view     — w/+/-:         display toggles (wrap, ctx)
-		//   chrome   — r/?/esc:       refresh, help, exit
-		nav := []string{"tab:focus", "enter:diff", "space:expand", "n/N:file", "M:commits", "gg/G:top/end"}
-		threads := []string{"R:show-resolved", "J:jump"}
-		if m.detailFocus == focusDiff {
-			threads = append(threads, "[/]:thread", "c:new", "C:reply", "x:resolve")
+		// nav-move + focus: always relevant
+		nav := []string{"j/k:move", "tab:focus", "enter:diff"}
+		// File-list jumps only matter in Files focus (where the list
+		// actually responds). In Diff focus they'd silently no-op.
+		if m.detailFocus == focusFiles {
+			nav = append(nav, "n/N:file", "gg/G:top/end")
+		} else {
+			// Diff focus: surface viewport scroll instead.
+			nav = append(nav, "pgup/pgdn:scroll")
 		}
-		actions := []string{"a:approve", "v:vote", "X:abandon"}
-		open := []string{"o:browser"}
-		view := []string{wrapHint(m), "+/-:context"}
-		chrome := []string{"r:refresh", "?:help", "esc:back"}
-		groups = [][]string{nav, threads, actions, open, view, chrome}
+		groups = append(groups, nav)
+
+		// Thread keys: only meaningful when threads exist on the PR
+		// AND the user is in a context where they fire (Diff focus on
+		// a file, or the synthetic Discussion entry selected).
+		hasThreads := len(m.threads) > 0
+		threadsActive := hasThreads && (m.detailFocus == focusDiff || m.detail.IsDiscussionSelected())
+		if threadsActive {
+			groups = append(groups, []string{"[/]:thread", "space:expand", "c:new", "C:reply", "x:resolve"})
+		}
+		// Jump-to-comments works whenever there are threads, in any
+		// focus — the J handler auto-flips state to land you somewhere
+		// readable, so hiding it would punish the user for being in
+		// the "wrong" focus.
+		if hasThreads {
+			groups = append(groups, []string{"J:jump"})
+		}
+		// Show-resolved toggle only matters when the PR actually has
+		// resolved threads to reveal/hide.
+		if hasAnyResolved(m.threads) {
+			groups = append(groups, []string{"R:show-resolved"})
+		}
+
+		// Always-on: commits picker, PR-level actions, browser, chrome.
+		groups = append(groups, []string{"M:commits"})
+		groups = append(groups, []string{"a:approve", "v:vote", "X:abandon"})
+		// Diff-only view toggles. In Files focus they're no-ops, so
+		// hiding them keeps the line honest.
+		if m.detailFocus == focusDiff {
+			groups = append(groups, []string{wrapHint(m), "+/-:context"})
+		}
+		groups = append(groups, []string{"o:browser"})
+		groups = append(groups, []string{"?:help", "esc:back"})
 	}
 	out := make([][]segment, 0, len(groups))
 	for _, g := range groups {

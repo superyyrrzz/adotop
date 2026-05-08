@@ -10,7 +10,7 @@ import (
 
 // renderTopbar produces the application's persistent top chrome:
 //
-//	  ceapex  ›  Engineering  ›  Reviewing                    renzeyu  14:32
+//	  myorg  ›  myproject  ›  Reviewing                       alice  14:32
 //	  ────────────────────────────────────────────────────────────────────────
 //
 // Layout zones:

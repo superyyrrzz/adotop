@@ -115,6 +115,12 @@ func (m ListModel) Selected() (ado.PRSummary, bool) {
 	return rows[m.cursor], true
 }
 
+// Rows returns the count of currently-visible rows on the active tab,
+// after the filter (if any) is applied. Used by the statusline to
+// gate hints — there's no point advertising `/:filter` on an empty
+// tab where it has nothing to filter.
+func (m ListModel) Rows() int { return len(m.visible()) }
+
 func (m ListModel) visible() []ado.PRSummary {
 	all := m.prs[m.tab]
 	if m.filter == "" {

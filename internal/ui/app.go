@@ -1681,6 +1681,20 @@ func (m Model) stickyResolvedBand() string {
 	return ""
 }
 
+// hasAnyResolved is the PR-wide variant of hasAnyResolvedForFile —
+// returns true when ANY thread on the PR is resolved. Used by the
+// statusline to decide whether to advertise the R toggle: hiding it
+// when no resolved threads exist means the user never wonders why R
+// "does nothing" on a fresh PR.
+func hasAnyResolved(all []ado.Thread) bool {
+	for _, t := range all {
+		if t.IsResolved() {
+			return true
+		}
+	}
+	return false
+}
+
 // hasAnyResolvedForFile is the predicate behind the show-resolved
 // mirror band — the band only makes sense when the file actually has
 // resolved threads to look at.

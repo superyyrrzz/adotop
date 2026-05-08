@@ -13,7 +13,7 @@ func TestParsePRArg(t *testing.T) {
 		{"empty_slice", []string{}, 0, false},
 		{"bare_id", []string{"1145743"}, 1145743, false},
 		{"id_with_whitespace", []string{"  1145743  "}, 1145743, false},
-		{"dev_azure_url", []string{"https://dev.azure.com/ceapex/Engineering/_git/Docs.Build/pullrequest/1145743"}, 1145743, false},
+		{"dev_azure_url", []string{"https://dev.azure.com/myorg/myproject/_git/myrepo/pullrequest/1145743"}, 1145743, false},
 		{"dev_azure_url_with_query", []string{"https://dev.azure.com/o/p/_git/r/pullrequest/42?_a=files"}, 42, false},
 		{"github_style_pull", []string{"https://example.com/owner/repo/pull/99"}, 99, false},
 		{"too_many", []string{"1", "2"}, 0, true},

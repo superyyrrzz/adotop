@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/superyyrrzz/adotop/internal/ado"
 	"github.com/superyyrrzz/adotop/internal/config"
 )
 
@@ -63,8 +64,14 @@ func TestStatuslineDropsHintsOnNarrowWidth(t *testing.T) {
 func TestStatuslineCommentHintsOnlyInDiffFocus(t *testing.T) {
 	m := newDetailModel(t)
 	m.width = 300 // wide enough that no hints get dropped
+	// The thread cluster is gated on "threads exist on the PR" too —
+	// seed one so the focus-gate is what actually drives the assertion.
+	m.threads = []ado.Thread{
+		{ID: 1, FilePath: "/a.go", Status: "active",
+			Comments: []ado.Comment{{Author: "A", Content: "x"}}},
+	}
 
-	// Files focus: comment hints absent.
+	// Files focus: comment hints absent (focus gate).
 	filesBar := renderStatusline(m)
 	for _, h := range []string{"c new", "C reply", "x resolve", "[/] thread"} {
 		if strings.Contains(filesBar, h) {
@@ -78,6 +85,66 @@ func TestStatuslineCommentHintsOnlyInDiffFocus(t *testing.T) {
 	for _, h := range []string{"c new", "C reply", "x resolve", "[/] thread"} {
 		if !strings.Contains(diffBar, h) {
 			t.Fatalf("diff focus should surface %q in hints, got: %s", h, diffBar)
+		}
+	}
+}
+
+// TestStatuslineHidesThreadHintsWhenNoThreads: the thread cluster is
+// gated on "PR has threads" too — a brand-new PR with zero comments
+// should not advertise [/]/c/C/x/space because pressing any of them
+// would silently no-op. Hiding cuts the wall-of-keys problem for new
+// users.
+func TestStatuslineHidesThreadHintsWhenNoThreads(t *testing.T) {
+	m := newDetailModel(t)
+	m.width = 300
+	m.detailFocus = focusDiff
+	// no threads seeded
+	out := renderStatusline(m)
+	for _, h := range []string{"[/] thread", "c new", "C reply", "x resolve", "space expand"} {
+		if strings.Contains(out, h) {
+			t.Fatalf("expected %q to be hidden when PR has no threads, got: %s", h, out)
+		}
+	}
+	// Sanity: J:jump and R:show-resolved are also gated on threads
+	// existing. They should be absent too.
+	for _, h := range []string{"J jump", "R show-resolved"} {
+		if strings.Contains(out, h) {
+			t.Fatalf("expected %q to be hidden when PR has no threads, got: %s", h, out)
+		}
+	}
+}
+
+// TestStatuslineHidesViewTogglesInFilesFocus: w (wrap) and +/- (ctx)
+// only act on the diff viewport. In Files focus they're no-ops, so
+// hiding them keeps the statusline honest about what's actually
+// reachable from the current state.
+func TestStatuslineHidesViewTogglesInFilesFocus(t *testing.T) {
+	m := newDetailModel(t)
+	m.width = 300
+	// default focus = files
+	out := renderStatusline(m)
+	for _, h := range []string{"w wrap", "+/- context"} {
+		if strings.Contains(out, h) {
+			t.Fatalf("expected %q hidden in Files focus, got: %s", h, out)
+		}
+	}
+}
+
+// TestStatuslineSurvivalKeysAlwaysVisible: the keys a confused user
+// most needs to find — help and back/quit — must survive every
+// gating decision. Catches a regression where a future cleanup
+// accidentally cuts ?:help out of one branch.
+func TestStatuslineSurvivalKeysAlwaysVisible(t *testing.T) {
+	m := newDetailModel(t)
+	m.width = 300
+	for _, focus := range []detailFocus{focusFiles, focusDiff} {
+		m.detailFocus = focus
+		out := renderStatusline(m)
+		if !strings.Contains(out, "? help") {
+			t.Fatalf("?:help missing in focus=%v: %s", focus, out)
+		}
+		if !strings.Contains(out, "esc back") {
+			t.Fatalf("esc:back missing in focus=%v: %s", focus, out)
 		}
 	}
 }
