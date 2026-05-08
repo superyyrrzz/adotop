@@ -4,6 +4,10 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
@@ -153,3 +157,36 @@ var errFakeFetch = &fetchErr{}
 type fetchErr struct{}
 
 func (*fetchErr) Error() string { return "fake fetch err" }
+
+// TestListRowSilentDuringRefresh: the sweep is intentionally silent —
+// no spinner, no row dim, no ANSI noise. State is tracked so
+// IsRefreshing reports correctly to the parent, but rendered output
+// for a row mid-refresh must be byte-identical to the same row when
+// idle. Locks down "no visual indicator" so a future change can't
+// reintroduce one without updating this test on purpose.
+func TestListRowSilentDuringRefresh(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	m := NewList(DefaultKeys())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: []ado.PRSummary{
+		{ID: 100, Title: "alpha row", Author: "a", SourceBranch: "f", TargetBranch: "main", Status: "active"},
+		{ID: 200, Title: "beta row", Author: "b", SourceBranch: "f", TargetBranch: "main", Status: "active"},
+	}})
+
+	idle := m.View()
+	m = m.SetRefreshing(100)
+	if !m.IsRefreshing() {
+		t.Fatalf("IsRefreshing should be true after SetRefreshing(100)")
+	}
+	withRefresh := m.View()
+	if withRefresh != idle {
+		t.Fatalf("rendered output changed during silent refresh — should be byte-identical")
+	}
+	m = m.SetRefreshing(0)
+	if m.IsRefreshing() {
+		t.Fatalf("IsRefreshing should clear after SetRefreshing(0)")
+	}
+}

@@ -11,14 +11,6 @@ import (
 	"github.com/superyyrrzz/adotop/internal/ado"
 )
 
-// recentsRefreshTickMsg drives the spinner animation while a sweep is
-// in flight. We tick at ~100ms — fast enough to read as motion, slow
-// enough that we don't re-render constantly when no actual refresh
-// completes between frames.
-type recentsRefreshTickMsg time.Time
-
-const recentsRefreshTickInterval = 100 * time.Millisecond
-
 // prRefreshedMsg is the single-PR result of a sweep step. The handler
 // patches the list row, persists the fresh PR to recents, records the
 // refresh time, and dispatches the next fetch (or finishes the sweep
@@ -40,13 +32,6 @@ type recentsRefreshKickoffMsg struct{}
 // there's anything to refresh.
 func startRecentsRefreshSweep() tea.Cmd {
 	return func() tea.Msg { return recentsRefreshKickoffMsg{} }
-}
-
-// recentsRefreshTick schedules one spinner-animation frame.
-func recentsRefreshTick() tea.Cmd {
-	return tea.Tick(recentsRefreshTickInterval, func(t time.Time) tea.Msg {
-		return recentsRefreshTickMsg(t)
-	})
 }
 
 // isOpenForRefresh reports whether a PR's lifecycle state is one that
@@ -136,10 +121,7 @@ func (m Model) kickRecentsRefresh() (Model, tea.Cmd) {
 	first := queue[0]
 	m.recentsRefresh.queue = queue[1:]
 	m.list = m.list.SetRefreshing(first)
-	return m, tea.Batch(
-		m.fetchOnePRForRefreshCmd(first),
-		recentsRefreshTick(),
-	)
+	return m, m.fetchOnePRForRefreshCmd(first)
 }
 
 // handlePRRefreshed processes a single sweep result and dispatches the

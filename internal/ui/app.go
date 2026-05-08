@@ -572,14 +572,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prRefreshedMsg:
 		mm, cmd := m.handlePRRefreshed(msg)
 		return mm, cmd
-	case recentsRefreshTickMsg:
-		// Keep ticking only while a sweep is in flight — avoid burning
-		// frames on an idle terminal.
-		if !m.list.IsRefreshing() {
-			return m, nil
-		}
-		m.list = m.list.AdvanceRefreshFrame()
-		return m, recentsRefreshTick()
 	case prsLoadedMsg:
 		if msg.err == nil && m.cache != nil && m.cfg.Org != "" && m.cfg.Project != "" && msg.tab != ado.TabRecents {
 			if err := m.cache.SaveList(m.cfg.Org, m.cfg.Project, msg.tab, msg.prs); err != nil {
