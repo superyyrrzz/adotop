@@ -137,6 +137,13 @@ type Model struct {
 	// nil == closed. Populated by D in detail screen.
 	descModal *descModalState
 
+	// composeModal backs the in-TUI compose overlay used by c (new
+	// thread) and C (reply). nil == closed. Replaced the previous
+	// $EDITOR-suspends-TUI-immediately path so the diff stays visible
+	// while the user types; ctrl+e from within the modal still drops
+	// to $EDITOR for long prose.
+	composeModal *composeModalState
+
 	// recentsRefresh tracks the in-flight serial sweep that re-fetches
 	// open PRs on the Recents tab so stale row data (votes, status,
 	// merge state) gets refreshed without the user having to enter
@@ -748,6 +755,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			mm, cmd := m.updateDescModal(msg)
 			return mm, cmd
 		}
+		// Compose overlay is similarly modal — while it's up, every
+		// key (including the textarea's own enter/arrow handling)
+		// belongs to it. ctrl+s/esc/ctrl+e are intercepted inside;
+		// everything else delegates to the textarea.
+		if m.composeModalOpen() {
+			mm, cmd := m.updateComposeModal(msg)
+			return mm, cmd
+		}
 		// Confirmation prompt swallows all keys until resolved.
 		if m.pendingAction.kind != "" {
 			if keyMatches(msg, m.keys.ConfirmYes) {
@@ -1016,12 +1031,12 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !m.threadKeysActive() {
 			return m, nil
 		}
-		return m, m.composeNewThreadCmd()
+		return m.openComposeNewModal(), nil
 	case keyMatches(msg, m.keys.ReplyThread):
 		if !m.threadKeysActive() {
 			return m, nil
 		}
-		return m, m.composeReplyCmd()
+		return m.openComposeReplyModal(), nil
 	case keyMatches(msg, m.keys.WrapDiff):
 		// Soft-wrap toggle for the diff preview. Off by default so
 		// large diffs stay scannable; on for files with long lines.
@@ -1221,6 +1236,13 @@ func (m Model) View() string {
 		}
 		body = overlayBox(body, m.renderDescModal(), m.width, bodyH)
 	}
+	if m.composeModalOpen() {
+		bodyH := m.height - lipgloss.Height(header) - lipgloss.Height(footer) - 2
+		if bodyH < 3 {
+			bodyH = 24
+		}
+		body = overlayBox(body, m.renderComposeModal(), m.width, bodyH)
+	}
 	if m.showHelp {
 		body = HelpBox.Render(strings.Join([]string{
 			"Help",
@@ -1241,8 +1263,8 @@ func (m Model) View() string {
 			"  enter       drill into Diff focus (Files focus only)",
 			"  space       expand thread under cursor (Discussion or Diff focus)",
 			"  [ / ]       prev / next thread (Diff focus)",
-			"  c           compose new PR-level comment via $EDITOR (Diff focus)",
-			"  C           reply to selected thread via $EDITOR (Diff focus)",
+			"  c           compose new PR-level comment in overlay (ctrl+e for $EDITOR)",
+			"  C           reply to selected thread in overlay (ctrl+e for $EDITOR)",
 			"  x           toggle resolve/reactivate selected thread (Diff focus)",
 			"  R           toggle showing resolved comments",
 			"  D           open full PR description in scrollable modal",

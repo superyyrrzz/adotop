@@ -473,16 +473,19 @@ func TestResolveKeyNoopWhenNoThreadSelected(t *testing.T) {
 	}
 }
 
-// c launches the editor (returns a tea.Cmd) when diff focus is set.
-// We can't actually run the editor in tests, but the dispatch contract
-// is observable.
+// c opens the in-TUI compose modal (no longer launches $EDITOR
+// directly — that's now reachable via ctrl+e from inside the modal).
+// The composeModal pointer being set is the public contract.
 func TestComposeKeyEnqueuesEditorCmd(t *testing.T) {
 	m := newDetailModel(t)
 	m.detailFocus = focusDiff
-	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	_ = mm.(Model)
-	if cmd == nil {
-		t.Fatalf("c should return a tea.Cmd to launch editor")
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	m = mm.(Model)
+	if !m.composeModalOpen() {
+		t.Fatalf("c in diff focus should open the compose modal")
+	}
+	if m.composeModal.targetThreadID != 0 {
+		t.Fatalf("c opens new-thread mode (target 0), got targetThreadID=%d", m.composeModal.targetThreadID)
 	}
 }
 
@@ -490,9 +493,12 @@ func TestComposeKeyIgnoredInFilesFocus(t *testing.T) {
 	m := newDetailModel(t)
 	// default focus = files
 	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	_ = mm.(Model)
+	m = mm.(Model)
 	if cmd != nil {
 		t.Fatalf("c in files focus should be a no-op, got cmd")
+	}
+	if m.composeModalOpen() {
+		t.Fatalf("c in files focus must not open the compose modal")
 	}
 }
 
@@ -508,11 +514,11 @@ func TestPostThreadResultUpdatesFooter(t *testing.T) {
 	}
 }
 
-// C with a thread selected returns a tea.Cmd; with no selection it's a
-// no-op. The reply path's distinguishing feature is that the dispatched
-// composeResultMsg carries targetThreadID > 0, but that's an internal
-// detail — the public contract here is "C dispatches when something
-// is selected, doesn't otherwise".
+// C with a thread selected opens the compose modal in reply mode.
+// Previously this dispatched a tea.Cmd to suspend the TUI and open
+// $EDITOR; the in-TUI textarea path swaps that for an overlay so the
+// diff stays visible while typing. The modal carries the targetThreadID
+// so the eventual ctrl+s dispatches a reply, not a new thread.
 func TestReplyKeyComposesAgainstSelectedThread(t *testing.T) {
 	m := newDetailModel(t)
 	m.detailFocus = focusDiff
@@ -521,10 +527,13 @@ func TestReplyKeyComposesAgainstSelectedThread(t *testing.T) {
 	}
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	m = mm.(Model)
-	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
-	_ = mm.(Model)
-	if cmd == nil {
-		t.Fatalf("C with thread selected should return a tea.Cmd")
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	m = mm.(Model)
+	if !m.composeModalOpen() {
+		t.Fatalf("C with thread selected should open the compose modal")
+	}
+	if m.composeModal.targetThreadID != 11 {
+		t.Fatalf("compose modal should target thread 11, got %d", m.composeModal.targetThreadID)
 	}
 }
 
@@ -532,9 +541,12 @@ func TestReplyKeyNoopWhenNoThreadSelected(t *testing.T) {
 	m := newDetailModel(t)
 	m.detailFocus = focusDiff
 	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
-	_ = mm.(Model)
+	m = mm.(Model)
 	if cmd != nil {
 		t.Fatalf("C with no thread selected should be no-op")
+	}
+	if m.composeModalOpen() {
+		t.Fatalf("C with no thread selected must not open the compose modal")
 	}
 }
 
