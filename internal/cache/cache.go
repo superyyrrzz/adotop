@@ -94,7 +94,7 @@ func (s *Store) SaveList(org, project string, tab ado.Tab, prs []ado.PRSummary) 
 	return writeJSON(s.listPath(org, project, tab), ListSnapshot{Schema: schemaVersion, PRs: prs})
 }
 
-const recentsCap = 50
+const recentsCap = 15
 
 type RecentsSnapshot struct {
 	Schema int             `json:"schema"`

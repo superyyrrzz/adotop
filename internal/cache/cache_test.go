@@ -96,15 +96,15 @@ func TestRecentsCap(t *testing.T) {
 	t.Setenv("HOME", dir)
 	t.Setenv("USERPROFILE", dir)
 	s, _ := New()
-	for i := 1; i <= 60; i++ {
+	for i := 1; i <= 25; i++ {
 		_ = s.RecordVisit(ado.PRSummary{ID: i})
 	}
 	got, _ := s.LoadRecents()
-	if len(got) != 50 {
-		t.Fatalf("expected cap 50, got %d", len(got))
+	if len(got) != 15 {
+		t.Fatalf("expected cap 15, got %d", len(got))
 	}
-	if got[0].ID != 60 || got[49].ID != 11 {
-		t.Fatalf("oldest entries should be evicted: head=%d tail=%d", got[0].ID, got[49].ID)
+	if got[0].ID != 25 || got[14].ID != 11 {
+		t.Fatalf("oldest entries should be evicted: head=%d tail=%d", got[0].ID, got[14].ID)
 	}
 }
 
