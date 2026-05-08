@@ -40,6 +40,11 @@ type DetailModel struct {
 	paneWidth int // width of the left pane (set by parent); 0 = unknown
 	paneHeight int
 	myID      string
+	// myVoteIsStale is true when the user's approval was cast on an
+	// earlier iteration than the latest push. Set by the parent
+	// Model via SetMyVoteIsStale; drives the "stale, re-approve
+	// needed" annotation on the My Vote line in reviewerPanel.
+	myVoteIsStale bool
 	// prThreads is the subset of PR threads that aren't anchored to a
 	// specific file (FilePath==""). Owned and refreshed by the parent
 	// Model; we only read it during renderHeader. Anchored threads are
@@ -74,6 +79,17 @@ func NewDetail(keys KeyMap) DetailModel { return DetailModel{keys: keys} }
 // the caller's row with "(you)".
 func (m DetailModel) SetMyID(id string) DetailModel {
 	m.myID = id
+	return m
+}
+
+// SetMyVoteIsStale marks the caller's approval as stale (their vote
+// was on an earlier iteration than the latest push). Drives the
+// "stale, re-approve needed" annotation on the My Vote line. The
+// parent Model recomputes this from staleVoteDataLoadedMsg and
+// pushes it through this setter so the rendering layer doesn't have
+// to care where the flag came from.
+func (m DetailModel) SetMyVoteIsStale(stale bool) DetailModel {
+	m.myVoteIsStale = stale
 	return m
 }
 
@@ -479,7 +495,7 @@ func (m DetailModel) renderHeader(focused bool) string {
 	}
 	b.WriteString(Faint.Render(fmt.Sprintf("%s  ·  %s  ·  %s → %s", repo, s.Author, s.SourceBranch, s.TargetBranch)))
 	b.WriteString("\n")
-	b.WriteString(reviewerPanel(s, m.myID))
+	b.WriteString(reviewerPanel(s, m.myID, m.myVoteIsStale))
 	b.WriteString("\n\n")
 
 	if m.detail != nil {
@@ -935,10 +951,18 @@ func voteLabel(vote int) (string, string) {
 // reviewers and their votes. This makes the post-approve state visible
 // without forcing the user to read the footer flash. `myID` is the caller's
 // descriptor, used to tag the caller's own reviewer row with "(you)".
-func reviewerPanel(s ado.PRSummary, myID string) string {
+// staleApproval annotates the My Vote line with a "stale, re-approve"
+// warning when the caller's most recent approval was on an earlier
+// iteration than the latest push.
+func reviewerPanel(s ado.PRSummary, myID string, staleApproval bool) string {
 	var b strings.Builder
 	myGlyph, myText := voteLabel(s.MyVote)
 	b.WriteString("My vote: " + myGlyph + " " + myText)
+	if staleApproval {
+		// Wait color (yellow) reads as "needs your action" without
+		// being red — stale isn't an error, it's a re-do.
+		b.WriteString("  " + Wait.Render("· stale, re-approve needed"))
+	}
 	if len(s.Reviewers) == 0 {
 		return b.String()
 	}

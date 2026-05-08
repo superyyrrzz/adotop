@@ -161,6 +161,13 @@ type Model struct {
 	// original list without a re-fetch.
 	prFiles []ado.FileChange
 
+	// myVoteIsStale is true when the user has approved (vote ≥ 5) at
+	// an earlier iteration than the latest push. Computed from the
+	// VoteUpdate system threads + iteration timestamps in
+	// staleVoteDataLoadedMsg. Surfaces as a "stale, re-approve
+	// needed" annotation on the My Vote line.
+	myVoteIsStale bool
+
 	// recentsRefresh tracks the in-flight serial sweep that re-fetches
 	// open PRs on the Recents tab so stale row data (votes, status,
 	// merge state) gets refreshed without the user having to enter
@@ -267,6 +274,18 @@ type threadsLoadedMsg struct {
 	threads   []ado.Thread
 	err       error
 	fromCache bool
+}
+
+// staleVoteDataLoadedMsg carries the iterations + vote events needed
+// to compute "your approval is stale, re-approve required." Both
+// fetches share one message because the staleness check needs both —
+// either alone is useless. err is set when either underlying fetch
+// failed; the staleness flag stays at false in that case (better to
+// not flag stale than to wrongly flag it).
+type staleVoteDataLoadedMsg struct {
+	iterations []ado.Iteration
+	events     []ado.VoteEvent
+	err        error
 }
 
 func tick(d time.Duration) tea.Cmd {
@@ -377,6 +396,17 @@ func (m Model) loadDetail(s ado.PRSummary) (Model, tea.Cmd) {
 			defer cancel()
 			threads, err := m.client.GetPullRequestThreads(ctx, s.RepoID, s.ID)
 			return threadsLoadedMsg{threads: threads, err: err}
+		},
+		func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			its, iterErr := m.client.GetPullRequestIterations(ctx, s.RepoID, s.ID)
+			events, voteErr := m.client.GetPullRequestVoteEvents(ctx, s.RepoID, s.ID)
+			err := iterErr
+			if err == nil {
+				err = voteErr
+			}
+			return staleVoteDataLoadedMsg{iterations: its, events: events, err: err}
 		},
 	)
 	return m, tea.Batch(cmds...)
@@ -694,6 +724,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.persistDetailField(func(snap *cache.DetailSnapshot) { snap.Threads = msg.threads })
 		}
 		return m, nil
+	case staleVoteDataLoadedMsg:
+		// Compute "your approval is stale" from iterations +
+		// VoteUpdate events. Errors are non-fatal — if either fetch
+		// fails we just leave myVoteIsStale=false (don't pretend to
+		// know without the data).
+		if msg.err != nil {
+			slog.Warn("stale-vote: fetch failed", "err", msg.err)
+			return m, nil
+		}
+		m.myVoteIsStale = computeMyStaleApproval(msg.iterations, msg.events, m.myID)
+		m.detail = m.detail.SetMyVoteIsStale(m.myVoteIsStale)
+		return m, nil
 	case diffLoadedMsg:
 		if msg.target != diffTargetPreview {
 			return m, nil
@@ -889,6 +931,7 @@ func (m Model) openDetail(s ado.PRSummary) (Model, tea.Cmd) {
 	m.expandedThread = map[int]bool{}
 	m.threadCursor = map[string]int{}
 	m.prThreadCursor = -1
+	m.myVoteIsStale = false
 	m.screen = screenDetail
 	// NOTE: previewCache survives PR re-open so bouncing list↔detail
 	// stays snappy. Refresh (R) explicitly clears the current PR below.
@@ -1317,34 +1360,11 @@ func (m Model) View() string {
 		body = overlayBox(body, m.renderCommitsModal(), m.width, bodyH)
 	}
 	if m.showHelp {
-		body = HelpBox.Render(strings.Join([]string{
-			"Help",
-			"",
-			"  ?           toggle this help",
-			"  q           quit (list) / back (detail); ctrl+c always quits",
-			"  r           refresh current screen",
-			"  o           open in browser",
-			"  /           filter (list)",
-			"  #           jump to PR by ID (list)",
-			"  tab/shift+tab  switch focus (Detail)",
-			"  n / N       next / prev file (Detail)",
-			"  ↑↓ pgup/pgdn  scroll focused pane",
-			"  gg / G       jump to first / last (file list or diff, depending on focus)",
-			"  a           approve PR (Detail)",
-			"  v           open vote menu: a/s/w/r/c (Detail)",
-			"  X           abandon PR (Detail, confirms)",
-			"  enter       drill into Diff focus (Files focus only)",
-			"  space       expand thread under cursor (Discussion or Diff focus)",
-			"  [ / ]       prev / next thread (Diff focus)",
-			"  c           compose new PR-level comment in overlay (ctrl+e for $EDITOR)",
-			"  C           reply to selected thread in overlay (ctrl+e for $EDITOR)",
-			"  x           toggle resolve/reactivate selected thread (Diff focus)",
-			"  R           toggle showing resolved comments",
-			"  D           open full PR description in scrollable modal",
-			"  M           pick a commit to view its diff alone (M again exits)",
-			"  J           jump to comments block on this file (expands all)",
-			"  esc         back",
-		}, "\n"))
+		bodyH := m.height - lipgloss.Height(header) - lipgloss.Height(footer) - 2
+		if bodyH < 3 {
+			bodyH = 24
+		}
+		body = overlayBox(body, renderHelpModal(m.width), m.width, bodyH)
 	}
 	// Pad the body so the footer sticks to the bottom of the terminal,
 	// regardless of how much content the current screen produced.

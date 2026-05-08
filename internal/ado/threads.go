@@ -62,11 +62,16 @@ type rawComment struct {
 }
 
 type rawThread struct {
-	ID            int           `json:"id"`
-	Status        string        `json:"status"`
-	IsDeleted     bool          `json:"isDeleted"`
-	ThreadContext *rawThreadCtx `json:"threadContext"`
-	Comments      []rawComment  `json:"comments"`
+	ID            int            `json:"id"`
+	Status        string         `json:"status"`
+	IsDeleted     bool           `json:"isDeleted"`
+	ThreadContext *rawThreadCtx  `json:"threadContext"`
+	Comments      []rawComment   `json:"comments"`
+	PublishedDate string         `json:"publishedDate"`
+	Properties    map[string]any `json:"properties"`
+	Identities    map[string]struct {
+		ID string `json:"id"`
+	} `json:"identities"`
 }
 
 type rawThreadsResp struct {
