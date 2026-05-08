@@ -195,6 +195,18 @@ func (m Model) refreshPreview() Model {
 		return m
 	}
 	body := rendered
+	if m.viewingCommit != nil {
+		// Per-commit view: hide all threads. Their line anchors come
+		// from the PR's iteration and won't align with arbitrary
+		// per-commit diffs, so showing them would point at the wrong
+		// lines. Diff stays as-is; user gets a clean read.
+		if m.wrapDiff {
+			body = wrapDiffLines(body, m.preview.vp.Width)
+		}
+		m.inlineThreadLines = nil
+		m.preview.vp.SetContent(body)
+		return m
+	}
 	// Inline-splice anchored threads. Pull raw bytes (Get) for the line-
 	// number map; both cache entries are bytes for the same diff so they
 	// stay in lockstep. Stash the thread→lineIndex map on the model so

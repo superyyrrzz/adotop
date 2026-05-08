@@ -155,6 +155,13 @@ func contextSegments(m Model) []segment {
 		}
 		ctx := fmt.Sprintf("PR #%d · %s", s.ID, focus)
 		segs := []segment{{text: ctx, style: contextStyle()}}
+		if m.viewingCommit != nil {
+			// Per-commit view marker — sticks out in the cursor color
+			// so the user can't miss that the diff they're reading is
+			// scoped to one commit, not the full PR.
+			label := fmt.Sprintf("commit %s · %s", m.viewingCommit.ShortID(), truncCols(m.viewingCommit.Subject, 40))
+			segs = append(segs, segment{text: label, style: contextStyle().Foreground(Cursor.GetForeground()).Bold(true)})
+		}
 		segs = append(segs, segment{text: ctxLabel(m.diffCtx), style: hintStyle()})
 		// Surface the cache-revalidation indicator so the user knows the
 		// screen they're looking at is being verified against the server.
@@ -201,7 +208,7 @@ func hintGroups(m Model) [][]segment {
 		//   open     — o:             external link
 		//   view     — w/+/-:         display toggles (wrap, ctx)
 		//   chrome   — r/?/esc:       refresh, help, exit
-		nav := []string{"tab:focus", "enter:diff", "space:expand", "n/N:file", "gg/G:top/end"}
+		nav := []string{"tab:focus", "enter:diff", "space:expand", "n/N:file", "M:commits", "gg/G:top/end"}
 		threads := []string{"R:show-resolved", "J:jump"}
 		if m.detailFocus == focusDiff {
 			threads = append(threads, "[/]:thread", "c:new", "C:reply", "x:resolve")

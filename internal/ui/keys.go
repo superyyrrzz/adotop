@@ -33,6 +33,10 @@ type KeyMap struct {
 	// two were overloaded onto enter and the routing depended on
 	// focus + selection state, which was easy to get wrong.
 	ExpandThread key.Binding
+	// CommitsPicker opens the M-key picker for viewing a single
+	// commit's diff instead of the accumulated PR diff. Press again
+	// to return to the PR view.
+	CommitsPicker key.Binding
 }
 
 func DefaultKeys() KeyMap {
@@ -73,5 +77,6 @@ func DefaultKeys() KeyMap {
 		DescModal:     key.NewBinding(key.WithKeys("D")),
 		JumpToComments: key.NewBinding(key.WithKeys("J")),
 		ExpandThread:   key.NewBinding(key.WithKeys(" ")),
+		CommitsPicker:  key.NewBinding(key.WithKeys("M")),
 	}
 }

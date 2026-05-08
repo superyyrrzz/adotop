@@ -144,6 +144,23 @@ type Model struct {
 	// to $EDITOR for long prose.
 	composeModal *composeModalState
 
+	// commitsModal backs the M-key picker that lists the PR's commits
+	// and lets the user view a single commit's diff. nil == closed.
+	commitsModal *commitsModalState
+
+	// viewingCommit, when non-nil, switches the detail screen from
+	// "show the accumulated PR diff" to "show this commit's diff."
+	// While set: m.detail.files is the commit's changed files,
+	// effectiveSourceSha/effectiveTargetSha return the commit's
+	// parent → commit SHA pair, and threads are hidden (PR iteration
+	// line anchors don't align with arbitrary per-commit diffs).
+	// Cleared by pressing M again or by exitCommitView.
+	viewingCommit *ado.Commit
+	// prFiles caches the full PR file list while viewingCommit is
+	// set, so toggling back to "all commits" view restores the
+	// original list without a re-fetch.
+	prFiles []ado.FileChange
+
 	// recentsRefresh tracks the in-flight serial sweep that re-fetches
 	// open PRs on the Recents tab so stale row data (votes, status,
 	// merge state) gets refreshed without the user having to enter
@@ -579,6 +596,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prRefreshedMsg:
 		mm, cmd := m.handlePRRefreshed(msg)
 		return mm, cmd
+	case commitsLoadedMsg:
+		if m.commitsModal == nil {
+			return m, nil
+		}
+		m.commitsModal.loading = false
+		if msg.err != nil {
+			m.commitsModal.err = msg.err.Error()
+			return m, nil
+		}
+		m.commitsModal.commits = msg.commits
+		return m, nil
+	case commitChangesLoadedMsg:
+		if msg.err != nil {
+			m.footerErr = "view commit: " + msg.err.Error()
+			return m, nil
+		}
+		// Stash the PR's full file list on first entry so the user
+		// can toggle back without a re-fetch. Subsequent commit
+		// switches reuse the same stash.
+		if m.viewingCommit == nil {
+			m.prFiles = m.detail.files
+		}
+		c := msg.commit
+		m.viewingCommit = &c
+		m.detail, _ = m.detail.Update(filesLoadedMsg{files: msg.files})
+		// Reset preview key so the next selection re-fetches against
+		// the commit's parent → commit SHA pair (driven by
+		// effectiveSourceSha/effectiveTargetSha).
+		m.previewKey = ""
+		mm, cmd := m.queuePreviewForSelection()
+		return mm, cmd
 	case prsLoadedMsg:
 		if msg.err == nil && m.cache != nil && m.cfg.Org != "" && m.cfg.Project != "" && msg.tab != ado.TabRecents {
 			if err := m.cache.SaveList(m.cfg.Org, m.cfg.Project, msg.tab, msg.prs); err != nil {
@@ -761,6 +809,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// everything else delegates to the textarea.
 		if m.composeModalOpen() {
 			mm, cmd := m.updateComposeModal(msg)
+			return mm, cmd
+		}
+		// Commits picker is modal too — j/k navigates the list,
+		// enter selects, esc cancels. M toggles it open/closed
+		// from the global path below.
+		if m.commitsModalOpen() {
+			mm, cmd := m.updateCommitsModal(msg)
 			return mm, cmd
 		}
 		// Confirmation prompt swallows all keys until resolved.
@@ -972,6 +1027,17 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// the model unchanged).
 		m = m.openDescModal()
 		return m, nil
+	case keyMatches(msg, m.keys.CommitsPicker):
+		// M toggles between the per-commit view and the full PR
+		// view. When viewingCommit is set, M exits commit view
+		// (restores the PR file list and SHAs); otherwise it opens
+		// the picker so the user can choose a commit to inspect.
+		if m.viewingCommit != nil {
+			m = m.exitCommitView()
+			return m, nil
+		}
+		mm, cmd := m.openCommitsModal()
+		return mm, cmd
 	case keyMatches(msg, m.keys.JumpToComments):
 		// J jumps the diff viewport to the comments block on the
 		// selected file. Two side effects, both in service of "land on
@@ -1243,6 +1309,13 @@ func (m Model) View() string {
 		}
 		body = overlayBox(body, m.renderComposeModal(), m.width, bodyH)
 	}
+	if m.commitsModalOpen() {
+		bodyH := m.height - lipgloss.Height(header) - lipgloss.Height(footer) - 2
+		if bodyH < 3 {
+			bodyH = 24
+		}
+		body = overlayBox(body, m.renderCommitsModal(), m.width, bodyH)
+	}
 	if m.showHelp {
 		body = HelpBox.Render(strings.Join([]string{
 			"Help",
@@ -1268,6 +1341,7 @@ func (m Model) View() string {
 			"  x           toggle resolve/reactivate selected thread (Diff focus)",
 			"  R           toggle showing resolved comments",
 			"  D           open full PR description in scrollable modal",
+			"  M           pick a commit to view its diff alone (M again exits)",
 			"  J           jump to comments block on this file (expands all)",
 			"  esc         back",
 		}, "\n"))
@@ -1340,7 +1414,7 @@ func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	key := diffSelectionKey(m.detail.Detail().SourceSha, m.detail.Detail().TargetSha, f.Path, m.diffCtx)
+	key := diffSelectionKey(m.effectiveSourceSha(), m.effectiveTargetSha(), f.Path, m.diffCtx)
 	if key == m.previewKey {
 		return m, nil
 	}
@@ -1375,7 +1449,7 @@ func (m Model) queuePreviewForSelection() (Model, tea.Cmd) {
 	}
 
 	m.previewReqID++
-	pm, cmd := m.loadDiff(diffTargetPreview, m.preview, m.previewReqID, m.detail.Summary(), f, m.detail.Detail().SourceSha, m.detail.Detail().TargetSha)
+	pm, cmd := m.loadDiff(diffTargetPreview, m.preview, m.previewReqID, m.detail.Summary(), f, m.effectiveSourceSha(), m.effectiveTargetSha())
 	m.preview = pm
 	mm, prefetchCmd := m.prefetchNeighbors()
 	m = mm
@@ -1398,7 +1472,6 @@ func (m Model) prefetchNeighbors() (Model, tea.Cmd) {
 	if m.detail.Detail() == nil {
 		return m, nil
 	}
-	d := m.detail.Detail()
 	files := m.detail.files
 	prID := m.detail.Summary().ID
 	// Prefetch the ±3 nearest files in DISPLAY order so the cache warms
@@ -1412,13 +1485,13 @@ func (m Model) prefetchNeighbors() (Model, tea.Cmd) {
 			continue
 		}
 		f := files[idx]
-		key := diffSelectionKey(d.SourceSha, d.TargetSha, f.Path, m.diffCtx)
+		key := diffSelectionKey(m.effectiveSourceSha(), m.effectiveTargetSha(), f.Path, m.diffCtx)
 		if _, ok := m.previewCache.Get(key); ok {
 			continue
 		}
 		// Reserve cache slot (nil) so we don't re-issue while in flight.
 		m.previewCache.Reserve(prID, key)
-		cmds = append(cmds, m.prefetchOne(f, key, d.SourceSha, d.TargetSha))
+		cmds = append(cmds, m.prefetchOne(f, key, m.effectiveSourceSha(), m.effectiveTargetSha()))
 	}
 	if len(cmds) == 0 {
 		return m, nil
