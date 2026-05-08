@@ -117,13 +117,11 @@ func TestDiscussionPaneRendersThreadsWithSelection(t *testing.T) {
 	}
 }
 
-// TestEnterTogglesPRThreadExpandFromDiffFocus: when the user has
-// focused into Diff to read the Discussion pane, enter must still
-// toggle the selected PR thread. Previously the Open handler routed
-// Diff focus to toggleThreadsForFile, which no-ops when no file is
-// selected (Discussion sentinel makes SelectedFile return false), so
-// enter looked dead.
-func TestEnterTogglesPRThreadExpandFromDiffFocus(t *testing.T) {
+// TestSpaceTogglesPRThreadExpandFromDiffFocus: with Discussion selected
+// and Diff focus active (user dropped in to read the pane), space must
+// toggle the selected PR thread's expand state. enter is reserved for
+// the focus-drill path now, so this exercises the new ExpandThread key.
+func TestSpaceTogglesPRThreadExpandFromDiffFocus(t *testing.T) {
 	m := newDetailModel(t)
 	m = seedPRThreads(m)
 	m.preview = m.preview.SetSize(60, 20)
@@ -132,19 +130,20 @@ func TestEnterTogglesPRThreadExpandFromDiffFocus(t *testing.T) {
 	m.detailFocus = focusDiff
 
 	if m.expandedThread[11] {
-		t.Fatalf("expandedThread[11]=true before enter; expected false")
+		t.Fatalf("expandedThread[11]=true before space; expected false")
 	}
-	mm, _ := m.updateDetailScreen(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, _ := m.updateDetailScreen(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	m = mm.(Model)
 	if !m.expandedThread[11] {
-		t.Fatalf("expandedThread[11]=false after enter in Diff focus; expected true")
+		t.Fatalf("expandedThread[11]=false after space in Diff focus; expected true")
 	}
 }
 
-// TestEnterTogglesPRThreadExpand: in Files focus + Discussion selected,
-// pressing enter on the cursor's PR thread flips its expandedThread
-// entry — same contract as enter on a file's threads in Diff focus.
-func TestEnterTogglesPRThreadExpand(t *testing.T) {
+// TestSpaceTogglesPRThreadExpand: in Files focus + Discussion selected,
+// pressing space on the cursor's PR thread flips its expandedThread
+// entry. enter no longer carries this — it's now strictly the
+// Files→Diff drill key.
+func TestSpaceTogglesPRThreadExpand(t *testing.T) {
 	m := newDetailModel(t)
 	m = seedPRThreads(m)
 	m.preview = m.preview.SetSize(60, 20)
@@ -152,18 +151,39 @@ func TestEnterTogglesPRThreadExpand(t *testing.T) {
 	m.prThreadCursor = 0 // cursor on thread 11
 
 	if m.expandedThread[11] {
-		t.Fatalf("expandedThread[11]=true before enter; expected false")
+		t.Fatalf("expandedThread[11]=true before space; expected false")
 	}
-	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	m = mm.(Model)
 	if !m.expandedThread[11] {
-		t.Fatalf("expandedThread[11]=false after enter; expected true")
+		t.Fatalf("expandedThread[11]=false after space; expected true")
 	}
 	// Reply text only renders when the thread is expanded — confirm
 	// the rendered pane reflects the new state.
 	view := stripANSI(m.preview.View())
 	if !strings.Contains(view, "first reply") {
 		t.Fatalf("expanded thread should show second comment 'first reply':\n%s", view)
+	}
+}
+
+// TestEnterDoesNotExpandPRThread: locks down the inverse contract —
+// enter on a Discussion-selected PR thread must NOT toggle expansion.
+// enter is now the Files→Diff drill key only. Catches a regression
+// that re-overloads enter.
+func TestEnterDoesNotExpandPRThread(t *testing.T) {
+	m := newDetailModel(t)
+	m = seedPRThreads(m)
+	m.preview = m.preview.SetSize(60, 20)
+	m.detail = m.detail.SelectDiscussion()
+	m.prThreadCursor = 0
+	// Files focus → enter should drill into Diff, not expand.
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mm.(Model)
+	if m.expandedThread[11] {
+		t.Fatalf("enter must not expand PR thread; expandedThread[11]=true")
+	}
+	if m.detailFocus != focusDiff {
+		t.Fatalf("enter from Files focus must drill into Diff; got focus=%v", m.detailFocus)
 	}
 }
 

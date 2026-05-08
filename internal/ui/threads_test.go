@@ -58,7 +58,7 @@ func TestRenderThreadExpandedShowsFullBody(t *testing.T) {
 }
 
 // TestRenderThreadCollapsedShowsExpandCue: collapsed threads must
-// continue to surface the "[N more — enter to expand]" cue so users
+// continue to surface the "[N more — space to expand]" cue so users
 // know there's something to do. This was already there before; the
 // guard is to keep the literal string stable as the affordance the
 // help screen and muscle memory point at.
@@ -71,7 +71,7 @@ func TestRenderThreadCollapsedShowsExpandCue(t *testing.T) {
 		},
 	}
 	out := renderThread(thread, false, 80)
-	if !strings.Contains(out, "enter to expand") {
+	if !strings.Contains(out, "space to expand") {
 		t.Fatalf("collapsed thread should advertise expand affordance:\n%s", out)
 	}
 }

@@ -424,7 +424,7 @@ func hasAnyForFile(all []ado.Thread, path string) bool {
 // renderThread emits one thread.
 //
 // Collapsed: a single line with the first comment squeezed to fit, plus
-// a "[N more — enter to expand]" cue when there are replies. This is
+// a "[N more — space to expand]" cue when there are replies. This is
 // the default density-optimized form.
 //
 // Expanded: a header line with location + author, then the full first
@@ -461,7 +461,7 @@ func renderThread(t ado.Thread, expand bool, width int) string {
 		}
 		more := ""
 		if len(t.Comments) > 1 {
-			more = Faint.Render(fmt.Sprintf("  [%d more — enter to expand]", len(t.Comments)-1))
+			more = Faint.Render(fmt.Sprintf("  [%d more — space to expand]", len(t.Comments)-1))
 		}
 		// Hard-fit to the pane width: if head + more would overflow,
 		// shrink the more-hint to a compact form first (so the affordance

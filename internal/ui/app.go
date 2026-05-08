@@ -1036,12 +1036,25 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyMatches(msg, m.keys.CtxMore), keyMatches(msg, m.keys.CtxLess):
 		return m.cycleDiffCtx(keyMatches(msg, m.keys.CtxMore))
 	case keyMatches(msg, m.keys.Open):
+		// enter has exactly one meaning on the detail screen: drill
+		// from Files focus into Diff focus. No-op in Diff focus
+		// (use esc/tab to leave). Thread expansion is handled by
+		// ExpandThread (space) — separating the two prevents the
+		// "enter does different things based on selection state"
+		// overload that caused enter-on-Discussion to silently no-op.
+		if m.detailFocus == focusFiles {
+			m.detailFocus = focusDiff
+		}
+		return m, nil
+	case keyMatches(msg, m.keys.ExpandThread):
+		// space toggles expansion of the thing under the cursor:
+		//   * Discussion selected → toggle the selected PR thread.
+		//   * Diff focus + file selected → toggle ALL visible threads
+		//     on the file (matches the historical batch behavior).
+		// Works in either focus when Discussion is selected so the
+		// user doesn't have to tab back to Files just to expand a
+		// PR-level comment they're reading in the preview pane.
 		if m.detail.IsDiscussionSelected() {
-			// Discussion selected: enter toggles the currently-selected
-			// PR thread's expand state. Works in BOTH Files and Diff
-			// focus — when the user has dropped into Diff focus to read
-			// the pane, requiring them to tab back to Files just to
-			// expand a comment is friction without payoff.
 			tid := m.currentThreadID()
 			if tid != 0 {
 				m.expandedThread[tid] = !m.expandedThread[tid]
@@ -1051,26 +1064,21 @@ func (m Model) updateDetailScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.detailFocus == focusDiff {
-			// Toggle expansion of every (visible) thread on the focused file.
 			f, ok := m.detail.SelectedFile()
 			if ok {
 				var expanded bool
 				m, expanded = m.toggleThreadsForFile(f.Path)
 				m = m.refreshPreview()
-				// Auto-scroll to the comments block when expanding so
-				// the user lands on what they just opened instead of
-				// having to PageDown past the diff.
 				if expanded {
 					m = m.scrollPreviewToComments()
 				}
 			}
 			return m, nil
 		}
-		// Files focus + file selected: enter drills into the diff for
-		// the selected file. Mirrors the "enter to open" idiom from the
-		// PR list. tab still works as the symmetric focus toggle for
-		// users who learned it.
-		m.detailFocus = focusDiff
+		// Files focus + a real file selected: nothing to expand —
+		// the user would need to drop into Diff focus first to see
+		// the threads. Silent no-op rather than an error, since
+		// space on a file row reads as "nothing happened" naturally.
 		return m, nil
 	case keyMatches(msg, m.keys.Abandon):
 		s := m.detail.Summary()
@@ -1230,7 +1238,8 @@ func (m Model) View() string {
 			"  a           approve PR (Detail)",
 			"  v           open vote menu: a/s/w/r/c (Detail)",
 			"  X           abandon PR (Detail, confirms)",
-			"  enter       expand comment threads on focused file (Diff focus)",
+			"  enter       drill into Diff focus (Files focus only)",
+			"  space       expand thread under cursor (Discussion or Diff focus)",
 			"  [ / ]       prev / next thread (Diff focus)",
 			"  c           compose new PR-level comment via $EDITOR (Diff focus)",
 			"  C           reply to selected thread via $EDITOR (Diff focus)",

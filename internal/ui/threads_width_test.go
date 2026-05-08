@@ -37,7 +37,7 @@ func TestRenderThreadCollapsedFitsWidthBudget(t *testing.T) {
 		// whole point of the budgeting (without it the viewport
 		// silently clips it off). Either the long form or the compact
 		// "+N" fallback counts.
-		if !strings.Contains(plain, "more — enter to expand") && !strings.Contains(plain, "+1") {
+		if !strings.Contains(plain, "more — space to expand") && !strings.Contains(plain, "+1") {
 			t.Fatalf("width=%d: expand cue missing from:\n%q", w, plain)
 		}
 	}

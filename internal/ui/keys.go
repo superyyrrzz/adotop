@@ -27,6 +27,12 @@ type KeyMap struct {
 	ReplyThread            key.Binding
 	DescModal              key.Binding
 	JumpToComments         key.Binding
+	// ExpandThread toggles the expand state of the thread under the
+	// cursor. Split out from Open (enter) so enter has one meaning
+	// (drill into Diff focus) and expand has its own — earlier the
+	// two were overloaded onto enter and the routing depended on
+	// focus + selection state, which was easy to get wrong.
+	ExpandThread key.Binding
 }
 
 func DefaultKeys() KeyMap {
@@ -66,5 +72,6 @@ func DefaultKeys() KeyMap {
 		ReplyThread:   key.NewBinding(key.WithKeys("C")),
 		DescModal:     key.NewBinding(key.WithKeys("D")),
 		JumpToComments: key.NewBinding(key.WithKeys("J")),
+		ExpandThread:   key.NewBinding(key.WithKeys(" ")),
 	}
 }

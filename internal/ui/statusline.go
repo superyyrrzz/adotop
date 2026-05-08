@@ -201,7 +201,7 @@ func hintGroups(m Model) [][]segment {
 		//   open     — o:             external link
 		//   view     — w/+/-:         display toggles (wrap, ctx)
 		//   chrome   — r/?/esc:       refresh, help, exit
-		nav := []string{"tab:focus", "enter:diff/expand", "n/N:file", "gg/G:top/end"}
+		nav := []string{"tab:focus", "enter:diff", "space:expand", "n/N:file", "gg/G:top/end"}
 		threads := []string{"R:show-resolved", "J:jump"}
 		if m.detailFocus == focusDiff {
 			threads = append(threads, "[/]:thread", "c:new", "C:reply", "x:resolve")
