@@ -1824,6 +1824,16 @@ func friendlyErr(err error) string {
 // for the standard view, larger for the user's "expand context" mode.
 // Set ADOTOP_DIFF_STRICT=1 to skip normalization.
 func simpleDiff(target, source []byte, path string, ctxLines int) []byte {
+	// Binary files: line-based LCS would happily split the bytes on
+	// LF and emit them as `+`/`-` lines, which renders as a wall of
+	// terminal garbage (the symptom we hit when a PR added an image
+	// or compressed asset). Mirror what `git diff` does — emit a
+	// single "Binary files ... differ" stanza so the user can tell
+	// what changed without us trying to text-diff bytes that aren't
+	// text.
+	if isBinaryDiffInput(target) || isBinaryDiffInput(source) {
+		return binaryDiffSummary(target, source, path)
+	}
 	t := normalizeForDiff(string(target))
 	s := normalizeForDiff(string(source))
 	tl := strings.Split(t, "\n")
@@ -1835,6 +1845,61 @@ func simpleDiff(target, source []byte, path string, ctxLines int) []byte {
 		b.WriteString(h)
 	}
 	return []byte(b.String())
+}
+
+// isBinaryDiffInput uses the same heuristic as `git diff`: a NUL byte
+// in the first 8 KB marks the buffer as binary. Cheap, well-known,
+// and matches user expectations from git. nil/empty buffers count as
+// not-binary (one side of an add/delete is always empty bytes).
+func isBinaryDiffInput(b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	const probe = 8 * 1024
+	end := len(b)
+	if end > probe {
+		end = probe
+	}
+	for i := 0; i < end; i++ {
+		if b[i] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// binaryDiffSummary emits a unified-diff-shaped placeholder so the
+// downstream renderer (Colorize, line-number map, splice walker)
+// keeps working. The sole hunk is one `+` line carrying a human-
+// readable byte-size summary — no actual content, so nothing to
+// mangle. Sizes use binary KB (1024) like the rest of the app and
+// `git diff --stat`.
+func binaryDiffSummary(target, source []byte, path string) []byte {
+	var b strings.Builder
+	fmt.Fprintf(&b, "--- a%s\n+++ b%s\n", path, path)
+	fmt.Fprintf(&b, "Binary files differ (%s → %s)\n",
+		formatByteSize(len(target)), formatByteSize(len(source)))
+	return []byte(b.String())
+}
+
+// formatByteSize returns a short human-readable size like "12.3 KB"
+// for diff summaries. Matches the units `git diff --stat` uses so
+// the output reads as a peer of git's own placeholders.
+func formatByteSize(n int) string {
+	const (
+		kb = 1024
+		mb = 1024 * 1024
+	)
+	switch {
+	case n == 0:
+		return "0 bytes"
+	case n < kb:
+		return fmt.Sprintf("%d bytes", n)
+	case n < mb:
+		return fmt.Sprintf("%.1f KB", float64(n)/kb)
+	default:
+		return fmt.Sprintf("%.1f MB", float64(n)/mb)
+	}
 }
 
 func normalizeForDiff(s string) string {
