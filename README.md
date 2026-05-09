@@ -10,11 +10,11 @@ terminal.
 ┌── Recents (12) ── Assigned (3) ── Created (1) ── Reviewing (8) ─────────────┐
 │  ID       State    Title                          Author     Source         │
 │  #1151413 OPEN     Fix BuildId collision under …  Alice A.   fix/build-id   │
-│▸ #1145087 READY    🛩️ April release prep           Bob B.     master         │
+│▸ #1145087 READY    April release prep             Bob B.     master         │
 │  #1140193 MERGED   Bump dependency                Dependabot security/      │
-│                                                                              │
-│  / filter   # goto-pr   enter open   o browser   ? help                      │
-└──────────────────────────────────────────────────────────────────────────────┘
+│                                                                             │
+│  / filter   # goto-pr   enter open   o browser   ? help                     │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### PR detail — Files focus
@@ -47,7 +47,7 @@ terminal.
 
 ```
 ┌── session.go ───────────────────────────────────────────────────────────────┐
-│  @@ -42,8 +42,12 @@ func (s *Session) Refresh(ctx context.Context) error { │
+│  @@ -42,8 +42,12 @@ func (s *Session) Refresh(ctx context.Context) error {  │
 │       if s.expiresAt.Before(time.Now()) {                                   │
 │           return ErrExpired                                                 │
 │       }                                                                     │
