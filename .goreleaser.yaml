@@ -97,3 +97,32 @@ scoops:
       name: goreleaserbot
       email: bot@goreleaser.com
     commit_msg_template: "scoop: bump adotop to {{ .Tag }}"
+
+# Homebrew tap — same shape as the scoop bucket above, but for
+# macOS (and Linux via brew). The formula is committed back to
+# Formula/adotop.rb on each tag. Users tap once:
+#
+#   brew tap superyyrrzz/adotop https://github.com/superyyrrzz/adotop
+#   brew install adotop
+#
+# We point the tap at this same repo (no separate homebrew-adotop
+# repo) so there's one place to send PRs and the default
+# GITHUB_TOKEN is enough to push the formula commit. Convention
+# would split into a `homebrew-adotop` repo for a project with many
+# formulae; for one binary it's friction without payoff.
+brews:
+  - name: adotop
+    repository:
+      owner: superyyrrzz
+      name: adotop
+      branch: main
+    directory: Formula
+    homepage: https://github.com/superyyrrzz/adotop
+    description: Terminal UI for Azure DevOps pull requests
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "brew: bump adotop to {{ .Tag }}"
+    test: |
+      system "#{bin}/adotop --version"

@@ -123,6 +123,13 @@ scoop bucket add adotop https://github.com/superyyrrzz/adotop
 scoop install adotop
 ```
 
+### macOS / Linux (Homebrew)
+
+```sh
+brew tap superyyrrzz/adotop https://github.com/superyyrrzz/adotop
+brew install adotop
+```
+
 ### From source (any OS)
 
 ```sh
