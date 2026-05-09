@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"regexp"
@@ -15,6 +16,20 @@ import (
 	"github.com/superyyrrzz/adotop/internal/ui"
 )
 
+// Version metadata, populated by GoReleaser via -X ldflags at
+// release-build time:
+//
+//	go build -ldflags="-X main.version=v0.1.0 -X main.commit=abc1234 -X main.date=2026-05-09"
+//
+// Default values are what `go build` (with no ldflags) and `go install`
+// produce — useful for local dev so `--version` doesn't print empty
+// strings, but not what release binaries should ever show.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "adotop:", err)
@@ -23,6 +38,21 @@ func main() {
 }
 
 func run() error {
+	// Top-level flags. We hand-roll instead of using flag.Parse so the
+	// existing positional-arg path (`adotop 1234` / `adotop <url>`) and
+	// the `init` subcommand keep working without rewriting their
+	// dispatch shape.
+	if len(os.Args) >= 2 {
+		switch os.Args[1] {
+		case "--version", "-v", "version":
+			fmt.Printf("adotop %s (%s, %s)\n", version, commit, date)
+			return nil
+		case "--help", "-h", "help":
+			printUsage(os.Stdout)
+			return nil
+		}
+	}
+
 	// Subcommand dispatch. `adotop init` runs the config-writer flow
 	// and exits — no TUI, no log file, no token fetch. Anything else
 	// falls through to the normal TUI launch path.
@@ -77,6 +107,24 @@ func run() error {
 	client := ado.NewClient(cfg.Org, tokens)
 
 	return ui.Run(cfg, client, prID)
+}
+
+// printUsage writes the top-level help text. Short by design — full
+// in-app keybinding reference lives behind `?` in the TUI itself.
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, "adotop — terminal UI for Azure DevOps pull requests")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  adotop                           Launch the TUI on the recents tab")
+	fmt.Fprintln(w, "  adotop <pr-id>                   Open a specific PR by ID")
+	fmt.Fprintln(w, "  adotop <pr-url>                  Open a PR by Azure DevOps URL")
+	fmt.Fprintln(w, "  adotop init                      Write or update ~/.adotop/config.toml")
+	fmt.Fprintln(w, "  adotop --version                 Print version, commit, build date")
+	fmt.Fprintln(w, "  adotop --help                    This message")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Press ? from any screen for the in-app keybinding reference.")
+	fmt.Fprintln(w, "Logs land in ~/.adotop/logs/adotop.log.")
+	fmt.Fprintln(w, "Project home: https://github.com/superyyrrzz/adotop")
 }
 
 // prURLRE matches the trailing `/pullrequest/<id>` (also `/pull/<id>` for

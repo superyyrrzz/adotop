@@ -10,6 +10,28 @@ import (
 	"github.com/superyyrrzz/adotop/internal/config"
 )
 
+// TestPrintUsageShape covers the smoke contract of `adotop --help`:
+// the printed text must list each top-level invocation we promise so
+// users learn what's there. Catches a regression where someone adds
+// a subcommand and forgets to advertise it.
+func TestPrintUsageShape(t *testing.T) {
+	var out bytes.Buffer
+	printUsage(&out)
+	want := []string{
+		"adotop init",
+		"adotop --version",
+		"adotop --help",
+		"<pr-id>",
+		"<pr-url>",
+		"~/.adotop/logs/adotop.log",
+	}
+	for _, w := range want {
+		if !strings.Contains(out.String(), w) {
+			t.Fatalf("usage missing %q:\n%s", w, out.String())
+		}
+	}
+}
+
 // TestInitWritesConfig: piping org + project answers through stdin
 // must produce a readable config.toml with those values. Exercises
 // the full prompt → write → reload contract.
