@@ -1,19 +1,19 @@
 {
-    "version": "0.1.0",
+    "version": "0.1.1",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/superyyrrzz/adotop/releases/download/v0.1.0/adotop_0.1.0_windows_x86_64.zip",
+            "url": "https://github.com/superyyrrzz/adotop/releases/download/v0.1.1/adotop_0.1.1_windows_x86_64.zip",
             "bin": [
                 "adotop.exe"
             ],
-            "hash": "31038be4b2d88d03b1ba66a195daf3a6106647dace6f1a794a6e6d3c69782983"
+            "hash": "16dc156e7092f05b2aaf1642921c38b397330e5eec59060143c1a99603a46039"
         },
         "arm64": {
-            "url": "https://github.com/superyyrrzz/adotop/releases/download/v0.1.0/adotop_0.1.0_windows_arm64.zip",
+            "url": "https://github.com/superyyrrzz/adotop/releases/download/v0.1.1/adotop_0.1.1_windows_arm64.zip",
             "bin": [
                 "adotop.exe"
             ],
-            "hash": "9492739e07ff9724dcb001fb9d1b6abd9be2bd7fd804f5e8703df0274ff9dfd6"
+            "hash": "f63feb5c1ee506ca3b68b0c5638888cccf15f07784064a0c15166bdf1db87095"
         }
     },
     "homepage": "https://github.com/superyyrrzz/adotop",
