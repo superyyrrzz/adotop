@@ -22,22 +22,22 @@ terminal.
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ PR #1151413  Fix BuildId collision under parallel generators   OPEN         │
-│ acme/billing-service  ·  Alice Anderson  ·  fix/build-id → main             │
-│ My vote: ✓ Approved · stale, re-approve needed                              │
-│ Reviewers: ✓ Bob Brown (you)   · Carol Chen   · *Required Reviewers Group   │
+│ acme/billing-service  -  Alice Anderson  -  fix/build-id -> main            │
+│ My vote: OK Approved - stale, re-approve needed                             │
+│ Reviewers: OK Bob Brown (you)  - Carol Chen  - *Required Reviewers Group    │
 │                                                                             │
 │ Description: Include BuildAction in GetBuildId() so each generator        … │
 │                                                                             │
-│ Status: 4 ✓                                                                 │
+│ Status: 4 OK                                                                │
 │                                                                             │
-│ ● Files                                                                     │
-│ 💬 Discussion (2)                                                           │
+│ * Files                                                                     │
+│   [Discussion (2)]                                                          │
 │ src/auth/                                                                   │
-│   edit  login.go        💬 3                                                │
-│ ▸ edit  session.go      💬 1                                                │
-│   add   token_store.go                                                      │
+│     edit  login.go         [3 comments]                                     │
+│ >   edit  session.go       [1 comment]                                      │
+│     add   token_store.go                                                    │
 │ src/api/                                                                    │
-│   edit  handlers.go     💬 2                                                │
+│     edit  handlers.go      [2 comments]                                     │
 │                                                                             │
 │ tab focus  enter diff  space expand  n/N file  M commits  J jump            │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -54,9 +54,9 @@ terminal.
 │  -    s.token = newToken                                                    │
 │  +    s.token = newToken                                                    │
 │  +    s.refreshedAt = time.Now()                                            │
-│  ▌ └─ 💬 ACTIVE  Ln 45  Carol Chen:                                         │
-│  ▌    Should we also bump expiresAt here, or is that the caller's job?      │
-│  ▌    [1 more — space to expand]                                            │
+│  |  \- ACTIVE  Ln 45  Carol Chen:                                           │
+│  |     Should we also bump expiresAt here, or is the caller responsible?    │
+│  |     [1 more - space to expand]                                           │
 │  +    return nil                                                            │
 │       }                                                                     │
 │                                                                             │
