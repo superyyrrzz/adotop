@@ -72,3 +72,28 @@ changelog:
       - Merge pull request
       - Merge remote-tracking branch
       - Merge branch
+
+# Scoop bucket — the manifest committed back into this repo at
+# bucket/adotop.json on each tag. Users add the bucket once
+# (scoop bucket add adotop https://github.com/superyyrrzz/adotop)
+# and `scoop install adotop` resolves to the latest GitHub release.
+#
+# Goreleaser uses GITHUB_TOKEN by default, so no extra secret is
+# needed — the same token release.yml already exposes is enough to
+# push the manifest commit. If you ever split the bucket into a
+# separate repo, swap `repository.name` and add a personal-access
+# token with cross-repo write scope.
+scoops:
+  - name: adotop
+    repository:
+      owner: superyyrrzz
+      name: adotop
+      branch: main
+    directory: bucket
+    homepage: https://github.com/superyyrrzz/adotop
+    description: Terminal UI for Azure DevOps pull requests
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "scoop: bump adotop to {{ .Tag }}"

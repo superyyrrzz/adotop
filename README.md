@@ -116,7 +116,14 @@ terminal.
 
 ## Install
 
-### From source
+### Windows (Scoop)
+
+```sh
+scoop bucket add adotop https://github.com/superyyrrzz/adotop
+scoop install adotop
+```
+
+### From source (any OS)
 
 ```sh
 go install github.com/superyyrrzz/adotop/cmd/adotop@latest
@@ -124,9 +131,10 @@ go install github.com/superyyrrzz/adotop/cmd/adotop@latest
 
 Requires Go 1.26+.
 
-### Prebuilt binary
+### Prebuilt binary (any OS)
 
-Releases are coming. For now, build from source.
+Download from [releases](https://github.com/superyyrrzz/adotop/releases) and
+drop the `adotop` binary on your `PATH`.
 
 ## Quick start
 
