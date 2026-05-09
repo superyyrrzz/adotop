@@ -60,16 +60,11 @@ Releases are coming. For now, build from source.
 # 1. One-time: log in to Azure DevOps via the az CLI.
 az login
 
-# 2. Tell adotop which org/project to default to.
-mkdir -p ~/.adotop
-cat > ~/.adotop/config.toml <<'EOF'
-org     = "your-org"
-project = "your-project"
-EOF
-
-# 3. Run.
+# 2. Run. First launch walks you through writing ~/.adotop/config.toml.
 adotop
 ```
+
+To re-run setup later (or change org/project): `adotop init`.
 
 You can also jump straight to a PR:
 

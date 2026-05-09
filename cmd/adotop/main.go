@@ -23,6 +23,13 @@ func main() {
 }
 
 func run() error {
+	// Subcommand dispatch. `adotop init` runs the config-writer flow
+	// and exits — no TUI, no log file, no token fetch. Anything else
+	// falls through to the normal TUI launch path.
+	if len(os.Args) >= 2 && os.Args[1] == "init" {
+		return runInit()
+	}
+
 	cfg, cfgPath, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -31,6 +38,27 @@ func run() error {
 	prID, err := parsePRArg(os.Args[1:])
 	if err != nil {
 		return err
+	}
+
+	// First-run UX: if the user has never written a config (vs. wrote
+	// one with empty org, which is their choice), auto-run init so
+	// the README quick start can collapse to `az login` + `adotop`.
+	// Skip when launching against a specific PR (`adotop 1234`) — the
+	// user's already past onboarding.
+	if cfg.Org == "" && prID == 0 {
+		exists, _ := config.Exists()
+		if !exists {
+			fmt.Fprintln(os.Stderr, "No config found. Walking you through setup.")
+			fmt.Fprintln(os.Stderr)
+			if err := runInit(); err != nil {
+				return err
+			}
+			fmt.Fprintln(os.Stderr)
+			cfg, cfgPath, err = config.Load()
+			if err != nil {
+				return fmt.Errorf("reload config after init: %w", err)
+			}
+		}
 	}
 
 	logPath, closeLog, err := applog.Init(slog.LevelInfo)
