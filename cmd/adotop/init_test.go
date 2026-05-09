@@ -2,13 +2,55 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/superyyrrzz/adotop/internal/ado"
 	"github.com/superyyrrzz/adotop/internal/config"
 )
+
+// TestPrintAuthErrorClassifiesSentinels: the user-friendly auth error
+// path must produce different messages for the three known states
+// (not-installed, not-logged-in, generic). Pin the exact substrings
+// users will read so accidental reword can't drift the output to
+// something less actionable.
+func TestPrintAuthErrorClassifiesSentinels(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want []string
+	}{
+		{
+			name: "not installed",
+			err:  fmt.Errorf("%w: exec: az: not found", ado.ErrAzNotInstalled),
+			want: []string{"az` CLI is required", "aka.ms/install-azure-cli", "az login"},
+		},
+		{
+			name: "not logged in",
+			err:  fmt.Errorf("%w: Please run 'az login'", ado.ErrAzNotLoggedIn),
+			want: []string{"not logged in", "az login"},
+		},
+		{
+			name: "generic",
+			err:  fmt.Errorf("network unreachable"),
+			want: []string{"auth failed", "network unreachable"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var out bytes.Buffer
+			printAuthError(&out, c.err)
+			for _, w := range c.want {
+				if !strings.Contains(out.String(), w) {
+					t.Errorf("expected %q in output, got:\n%s", w, out.String())
+				}
+			}
+		})
+	}
+}
 
 // TestPrintUsageShape covers the smoke contract of `adotop --help`:
 // the printed text must list each top-level invocation we promise so

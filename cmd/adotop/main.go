@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/superyyrrzz/adotop/internal/ado"
 	"github.com/superyyrrzz/adotop/internal/applog"
@@ -30,9 +32,17 @@ var (
 	date    = "unknown"
 )
 
+// errSilent is returned by run() when an error has already been
+// printed to stderr in a friendly form. main() exits non-zero
+// without prepending its usual "adotop:" prefix so the user sees
+// the bespoke message we wrote, not a doubled-up wrapper line.
+var errSilent = errors.New("silent")
+
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "adotop:", err)
+		if !errors.Is(err, errSilent) {
+			fmt.Fprintln(os.Stderr, "adotop:", err)
+		}
 		os.Exit(1)
 	}
 }
@@ -104,9 +114,42 @@ func run() error {
 	}
 
 	tokens := ado.NewAzCLITokenProvider()
+	// Pre-flight: verify `az` is installed and the user is logged in
+	// before launching the TUI. Without this, an unauthenticated user
+	// sees a working-but-empty TUI with a cryptic "auth: get token:
+	// exec: az: not found" footer banner — bad first impression.
+	// Errors are classified so the message tells the user what to do
+	// rather than dumping exec internals.
+	if cfg.Org != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if _, err := tokens.Token(ctx); err != nil {
+			printAuthError(os.Stderr, err)
+			return errSilent
+		}
+	}
 	client := ado.NewClient(cfg.Org, tokens)
 
 	return ui.Run(cfg, client, prID)
+}
+
+// printAuthError translates a token-fetch failure into an actionable
+// message on stderr. Sentinel errors get bespoke text; anything else
+// falls through to the raw error so we don't hide unexpected failures.
+func printAuthError(w io.Writer, err error) {
+	switch {
+	case errors.Is(err, ado.ErrAzNotInstalled):
+		fmt.Fprintln(w, "adotop: the `az` CLI is required but isn't installed.")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "  Install it from https://aka.ms/install-azure-cli")
+		fmt.Fprintln(w, "  Then run `az login` and try `adotop` again.")
+	case errors.Is(err, ado.ErrAzNotLoggedIn):
+		fmt.Fprintln(w, "adotop: not logged in to Azure DevOps.")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "  Run `az login` and try `adotop` again.")
+	default:
+		fmt.Fprintf(w, "adotop: auth failed: %v\n", err)
+	}
 }
 
 // printUsage writes the top-level help text. Short by design — full

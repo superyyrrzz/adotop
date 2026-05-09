@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
@@ -15,6 +16,19 @@ type TokenProvider interface {
 	Token(ctx context.Context) (string, error)
 	Invalidate()
 }
+
+// Sentinel auth errors. The CLI's pre-flight check and the TUI's
+// footer-error renderer both look for these via errors.Is so they
+// can show actionable, friendly messages instead of the raw "exec:
+// az: not found" / "Please run 'az login'" leakage.
+var (
+	// ErrAzNotInstalled fires when `az` isn't on PATH at all.
+	ErrAzNotInstalled = errors.New("az CLI not installed")
+	// ErrAzNotLoggedIn fires when `az` runs but reports the user is
+	// not authenticated (typically "Please run 'az login' to setup
+	// account" in stderr).
+	ErrAzNotLoggedIn = errors.New("az CLI not logged in")
+)
 
 // AzCLITokenProvider shells out to `az account get-access-token`.
 type AzCLITokenProvider struct {
@@ -31,8 +45,8 @@ func NewAzCLITokenProvider() *AzCLITokenProvider {
 
 type azTokenResponse struct {
 	AccessToken string `json:"accessToken"`
-	ExpiresOn   string `json:"expiresOn"`   // legacy: "2026-04-25 15:00:00.000000"
-	Expires_On  int64  `json:"expires_on"`  // newer az versions: unix seconds
+	ExpiresOn   string `json:"expiresOn"`  // legacy: "2026-04-25 15:00:00.000000"
+	Expires_On  int64  `json:"expires_on"` // newer az versions: unix seconds
 }
 
 func (p *AzCLITokenProvider) Token(ctx context.Context) (string, error) {
@@ -44,9 +58,20 @@ func (p *AzCLITokenProvider) Token(ctx context.Context) (string, error) {
 	cmd := exec.CommandContext(ctx, "az", "account", "get-access-token", "--resource", adoResource, "--output", "json")
 	out, err := cmd.Output()
 	if err != nil {
+		// Classify the error so callers can surface a friendly message.
+		// exec.ErrNotFound covers "az not on PATH"; the stderr from a
+		// running-but-failing az covers "not logged in" and other auth
+		// states. Wrapping with %w preserves the original for logs.
+		if errors.Is(err, exec.ErrNotFound) {
+			return "", fmt.Errorf("%w: %v", ErrAzNotInstalled, err)
+		}
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
-			return "", fmt.Errorf("az get-access-token: %w: %s", err, string(ee.Stderr))
+			stderr := string(ee.Stderr)
+			if isAzLoginNeeded(stderr) {
+				return "", fmt.Errorf("%w: %s", ErrAzNotLoggedIn, strings.TrimSpace(stderr))
+			}
+			return "", fmt.Errorf("az get-access-token: %w: %s", err, stderr)
 		}
 		return "", fmt.Errorf("az get-access-token: %w", err)
 	}
@@ -80,4 +105,18 @@ func (p *AzCLITokenProvider) Invalidate() {
 	p.token = ""
 	p.expiresAt = time.Time{}
 	p.mu.Unlock()
+}
+
+// isAzLoginNeeded recognizes the stderr az prints when the user has
+// no cached credentials. Match is loose because az's exact wording
+// has shifted across versions ("Please run 'az login'", "az login",
+// "AADSTS50058 ... no logged-in user", etc.). Whichever variant we
+// see, the actionable answer is the same: run az login.
+func isAzLoginNeeded(stderr string) bool {
+	s := strings.ToLower(stderr)
+	return strings.Contains(s, "az login") ||
+		strings.Contains(s, "no subscriptions") ||
+		strings.Contains(s, "please run") ||
+		strings.Contains(s, "aadsts50058") ||
+		strings.Contains(s, "credentials are required")
 }
