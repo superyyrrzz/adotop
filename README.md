@@ -4,6 +4,8 @@ A terminal UI for [Azure DevOps](https://dev.azure.com) pull requests. Triage
 your queue, read diffs, leave comments, and approve — without leaving the
 terminal.
 
+### PR list
+
 ```
 ┌── Recents (12) ── Assigned (3) ── Created (1) ── Reviewing (8) ─────────────┐
 │  ID       State    Title                          Author     Source         │
@@ -13,6 +15,78 @@ terminal.
 │                                                                              │
 │  / filter   # goto-pr   enter open   o browser   ? help                      │
 └──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### PR detail — Files focus
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PR #1151413  Fix BuildId collision under parallel generators   OPEN         │
+│ acme/billing-service  ·  Alice Anderson  ·  fix/build-id → main             │
+│ My vote: ✓ Approved · stale, re-approve needed                              │
+│ Reviewers: ✓ Bob Brown (you)   · Carol Chen   · *Required Reviewers Group   │
+│                                                                             │
+│ Description: Include BuildAction in GetBuildId() so each generator        … │
+│                                                                             │
+│ Status: 4 ✓                                                                 │
+│                                                                             │
+│ ● Files                                                                     │
+│ 💬 Discussion (2)                                                           │
+│ src/auth/                                                                   │
+│   edit  login.go        💬 3                                                │
+│ ▸ edit  session.go      💬 1                                                │
+│   add   token_store.go                                                      │
+│ src/api/                                                                    │
+│   edit  handlers.go     💬 2                                                │
+│                                                                             │
+│ tab focus  enter diff  space expand  n/N file  M commits  J jump            │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Diff view with inline comment
+
+```
+┌── session.go ───────────────────────────────────────────────────────────────┐
+│  @@ -42,8 +42,12 @@ func (s *Session) Refresh(ctx context.Context) error { │
+│       if s.expiresAt.Before(time.Now()) {                                   │
+│           return ErrExpired                                                 │
+│       }                                                                     │
+│  -    s.token = newToken                                                    │
+│  +    s.token = newToken                                                    │
+│  +    s.refreshedAt = time.Now()                                            │
+│  ▌ └─ 💬 ACTIVE  Ln 45  Carol Chen:                                         │
+│  ▌    Should we also bump expiresAt here, or is that the caller's job?      │
+│  ▌    [1 more — space to expand]                                            │
+│  +    return nil                                                            │
+│       }                                                                     │
+│                                                                             │
+│  [/] thread  space expand  c new  C reply  x resolve  R show-resolved       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Help overlay
+
+```
+┌─── Help ────────────────────────────────────────────────────────────────────┐
+│  ─ Navigation                                                               │
+│    j / k or ↓ / ↑     move cursor (wraps at edges)                          │
+│    n / N              next / prev file (Detail)                             │
+│    tab / shift+tab    switch Files ↔ Diff focus                             │
+│    enter              drill into Diff focus (from Files)                    │
+│                                                                             │
+│  ─ Threads                                                                  │
+│    [ / ]              prev / next thread                                    │
+│    space              expand thread under cursor                            │
+│    c / C              compose new comment / reply                           │
+│    x                  toggle resolve / reactivate                           │
+│                                                                             │
+│  ─ Actions                                                                  │
+│    a                  approve PR                                            │
+│    v                  open vote menu                                        │
+│    M                  view a single commit's diff                           │
+│                                                                             │
+│  ? or esc to close                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## What it does
