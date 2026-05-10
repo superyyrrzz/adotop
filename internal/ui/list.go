@@ -697,15 +697,6 @@ func padCols(s string, cols int) string {
 	return truncCols(s, cols)
 }
 
-// padRunes is kept for callers that want simple rune-count padding.
-func padRunes(s string, width int) string {
-	n := len([]rune(s))
-	if n >= width {
-		return s
-	}
-	return s + strings.Repeat(" ", width-n)
-}
-
 func age(t time.Time) string {
 	d := time.Since(t)
 	switch {

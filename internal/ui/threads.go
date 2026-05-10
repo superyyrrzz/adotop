@@ -512,7 +512,7 @@ func renderThread(t ado.Thread, expand bool, width int) string {
 	b.WriteString("\n")
 	b.WriteString(renderCommentBody(sanitizeComment(first.Author, first.Content), width, bodyIndent))
 	for _, c := range t.Comments[1:] {
-		b.WriteString(fmt.Sprintf("  ↳ %s:\n", Header.Render(c.Author)))
+		fmt.Fprintf(&b, "  ↳ %s:\n", Header.Render(c.Author))
 		b.WriteString(renderCommentBody(sanitizeComment(c.Author, c.Content), width, bodyIndent))
 	}
 	return b.String()

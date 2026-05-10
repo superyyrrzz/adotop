@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -166,7 +165,7 @@ var _ = func(t *testing.T) *Store { return newTestStore(t) }
 func TestLoadDetailRejectsSchemaMismatch(t *testing.T) {
 	s := newTestStore(t)
 	// Hand-write a file with the wrong schema.
-	bad := fmt.Sprintf(`{"schema":99,"pr_id":11}`)
+	bad := `{"schema":99,"pr_id":11}`
 	if err := os.WriteFile(s.detailPath(11), []byte(bad), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}

@@ -27,10 +27,7 @@ func rightLineNumbers(raw []byte) []int {
 	out := make([]int, 0, len(lines))
 	rightLine := 0 // becomes 1-based the moment we hit the first hunk
 	for _, line := range lines {
-		body := line
-		if strings.HasSuffix(body, "\n") {
-			body = body[:len(body)-1]
-		}
+		body := strings.TrimSuffix(line, "\n")
 		switch {
 		case strings.HasPrefix(body, "@@"):
 			if start, ok := parseHunkRightStart(body); ok {
@@ -205,13 +202,6 @@ func renderInlineThread(t ado.Thread, expand bool, width int, selected bool) str
 func inlineSelectedHeadStyle() lipgloss.Style {
 	bg := lipgloss.AdaptiveColor{Light: "#dce0e8", Dark: "#313244"}
 	return lipgloss.NewStyle().Background(bg)
-}
-
-// fmtLineLabel is a tiny helper used by callers that want to print a
-// line number alongside other text. Centralized here so the formatting
-// stays consistent across renderers.
-func fmtLineLabel(n int) string {
-	return fmt.Sprintf("ln %d", n)
 }
 
 // renderDiscussionPane renders the PR-level (unanchored) thread list

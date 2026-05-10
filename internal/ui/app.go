@@ -1744,12 +1744,6 @@ func spliceAtIndex(body string, idx int, replacement string) string {
 	return strings.Join(lines, "\n")
 }
 
-// previewPaneView is retained as a thin shim for any caller that still
-// wants the "title + body" string form (currently only tests).
-func (m Model) previewPaneView() string {
-	return m.previewPaneTitle() + "\n" + m.previewPaneBody()
-}
-
 type previewLayout struct {
 	split      bool
 	bodyHeight int

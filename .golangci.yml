@@ -1,0 +1,73 @@
+# golangci-lint config (v2 schema). See https://golangci-lint.run/.
+#
+# Philosophy: enable a small set of high-signal linters and tune them
+# down to "real bugs and dead code" — not stylistic rewrites. The
+# default linter set in v2 is mostly fine; we just shape exclusions
+# so the noise from tests and best-effort cleanup paths doesn't
+# drown out actual findings.
+
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck      # unchecked error returns
+    - govet         # vet's catch-all (composites, copylocks, lostcancel, etc.)
+    - ineffassign   # assignments to variables that go unused
+    - staticcheck   # standard quality + correctness rules
+    - unused        # dead functions/vars
+
+  exclusions:
+    # Standard exclusion presets that the default v2 config ships with.
+    # Without these, errcheck flags every fmt.Fprintln/io.Copy on
+    # output streams as if they could fail in a way the caller cares
+    # about — almost always wrong on best-effort writes to stdout/
+    # stderr or a discarded body.
+    presets:
+      - common-false-positives
+      - std-error-handling
+
+    rules:
+      # Test files exec lots of "best-effort" calls (httptest writers,
+      # tmp file cleanup) where checking errors adds noise without
+      # catching bugs. Mute errcheck there.
+      - path: _test\.go
+        linters: [errcheck]
+
+      # io.Copy(io.Discard, resp.Body) — the canonical "drain so the
+      # connection can be reused" idiom. The Copy err on a body we
+      # already decided to throw away isn't actionable.
+      - source: "io\\.Copy\\(io\\.Discard"
+        linters: [errcheck]
+
+      # defer closeLog() — log-file close on shutdown. If it fails
+      # we're already exiting; nothing useful to do with the err.
+      - source: "defer closeLog\\(\\)"
+        linters: [errcheck]
+
+      # Best-effort cleanup paths in compose flows: tmp file goes
+      # away on next reboot if Remove fails, and the surrounding
+      # code already returned an error explaining the real failure.
+      - source: "os\\.Remove\\("
+        linters: [errcheck]
+      - source: "\\.Close\\(\\)$"
+        linters: [errcheck]
+
+      # staticcheck QF* are quickfix suggestions (style rewrites).
+      # Useful but not bugs. Suppress the ones whose "fix" hurts
+      # readability or reflects taste, not correctness.
+      - linters: [staticcheck]
+        text: "QF1008"   # could remove embedded field "X" from selector
+      - linters: [staticcheck]
+        text: "QF1011"   # could omit type from var declaration
+      - linters: [staticcheck]
+        text: "QF1001"   # could apply De Morgan's law
+
+issues:
+  # Don't auto-cap how many issues are shown — fewer surprises during
+  # the first contributor's local run.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  timeout: 3m

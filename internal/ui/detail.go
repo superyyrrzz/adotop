@@ -602,42 +602,6 @@ func (m DetailModel) descCap() int {
 	return c
 }
 
-func (m DetailModel) fileWindow() (int, int) {
-	// Deprecated: kept for tests; see rowWindow for the live tree pane.
-	total := len(m.files)
-	if total == 0 {
-		return 0, 0
-	}
-	return 0, total
-}
-
-// wrapLines breaks each input line at width columns (rune-aware-ish; we
-// approximate with byte length since most ADO descriptions are ASCII).
-// This is what the lipgloss left-pane renderer will do anyway, so we
-// need to count the wrapped lines accurately when budgeting the file
-// list.
-func wrapLines(in []string, width int) []string {
-	if width <= 0 {
-		return in
-	}
-	var out []string
-	for _, line := range in {
-		// Strip ANSI for measurement? Description is plain markdown, so
-		// just count runes.
-		runes := []rune(line)
-		if len(runes) == 0 {
-			out = append(out, "")
-			continue
-		}
-		for len(runes) > width {
-			out = append(out, string(runes[:width]))
-			runes = runes[width:]
-		}
-		out = append(out, string(runes))
-	}
-	return out
-}
-
 // fileTreeRow is one rendered line in the file pane: either a directory
 // header (isDir=true, fileIdx=-1) or a file row (isDir=false, fileIdx is
 // the index into m.files). depth is the indent level.
@@ -718,14 +682,7 @@ func rowIndexForFile(rows []fileTreeRow, fileIdx int) int {
 	return -1
 }
 
-// rowWindow scrolls the rendered tree so the cursor row stays visible,
-// keeping the parent directory header above the cursor in view when
-// possible.
-func (m DetailModel) rowWindow(rows []fileTreeRow, cursorRow int) (int, int) {
-	return m.rowWindowFitting(rows, cursorRow, 0)
-}
-
-// rowWindowFitting is like rowWindow but reserves headerLines for the
+// rowWindowFitting reserves headerLines for the renderHeader block
 // renderHeader block above. This guarantees the header stays on screen
 // even when the file list would otherwise overflow.
 //
@@ -743,20 +700,15 @@ func (m DetailModel) rowWindowFitting(rows []fileTreeRow, cursorRow, headerLines
 	// Reserve headerLines for the always-visible top section, plus a
 	// small footer/scrollbar/padding margin (4 rows).
 	cap := h - headerLines - 4
-	if headerLines == 0 {
-		// Legacy path (rowWindow caller): use the old descCap estimate.
-		cap = h - m.descCap() - 12
-	} else {
-		// Cap the file list at ~half the pane height so the description
-		// (rendered inside the header block above) stays readable. We
-		// never go below 6 rows so a tiny pane still shows a few files.
-		half := h / 2
-		if half < 6 {
-			half = 6
-		}
-		if cap > half {
-			cap = half
-		}
+	// Cap the file list at ~half the pane height so the description
+	// (rendered inside the header block above) stays readable. We
+	// never go below 6 rows so a tiny pane still shows a few files.
+	half := h / 2
+	if half < 6 {
+		half = 6
+	}
+	if cap > half {
+		cap = half
 	}
 	if cap < 3 {
 		cap = 3
@@ -830,7 +782,7 @@ func renderStatusBlock(sts []ado.StatusCheck) string {
 		if p.n == 0 {
 			continue
 		}
-		b.WriteString(fmt.Sprintf(" %d %s ", p.n, statusGlyph(p.state)))
+		fmt.Fprintf(&b, " %d %s ", p.n, statusGlyph(p.state))
 	}
 	b.WriteString("\n")
 	for i, p := range picks {

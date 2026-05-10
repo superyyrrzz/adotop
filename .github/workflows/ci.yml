@@ -19,3 +19,19 @@ jobs:
       - run: go vet ./...
       - run: go build ./...
       - run: go test ./...
+
+  # Lint runs once on Linux. golangci-lint is platform-independent;
+  # spending three runners' time on identical output isn't useful.
+  # Config lives in .golangci.yml at the repo root.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.12
+
