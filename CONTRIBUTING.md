@@ -18,7 +18,14 @@ git clone https://github.com/superyyrrzz/adotop
 cd adotop
 make build      # produces ./adotop.exe
 make test       # full unit-test suite, must pass before merge
+make lint       # golangci-lint with the project config — same gate CI uses
 make test-live  # exercises real ADO endpoints; requires `az login`
+```
+
+`make lint` requires golangci-lint installed locally. One-time:
+
+```sh
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 ```
 
 `make test-live` is opt-in via the `live` build tag — it doesn't run in
@@ -28,7 +35,7 @@ rendering" change done.
 
 ## Code style
 
-- Go's `gofmt` defaults; CI runs `go vet`.
+- Go's `gofmt` defaults; CI runs `go vet` and `golangci-lint`.
 - Follow the existing patterns in the file you're editing rather than
   importing a new convention.
 - Comments explain *why*, not *what*. If a future reader can derive the
