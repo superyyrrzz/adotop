@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="650" viewBox="0 0 1100 650" role="img" aria-labelledby="title desc">
+  <title id="title">adotop sanitized terminal demo</title>
+  <desc id="desc">Animated terminal mock showing Azure DevOps pull request list, details, diff comments, and approval using fake data.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10131a"/>
+      <stop offset="0.55" stop-color="#171923"/>
+      <stop offset="1" stop-color="#202433"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="20" stdDeviation="22" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <style>
+      .window { fill: #11141c; stroke: #313849; stroke-width: 1.5; filter: url(#shadow); }
+      .topbar { fill: #1c2230; }
+      .dot-red { fill: #ff5f57; }
+      .dot-yellow { fill: #ffbd2e; }
+      .dot-green { fill: #28c840; }
+      .chrome-text { fill: #9aa4b2; font: 500 16px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+      .term { fill: #c9d1d9; font: 18px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+      .dim { fill: #8b949e; }
+      .muted { fill: #6e7681; }
+      .accent { fill: #7dd3fc; }
+      .green { fill: #9ece6a; }
+      .yellow { fill: #e0af68; }
+      .red { fill: #f7768e; }
+      .purple { fill: #bb9af7; }
+      .panel { fill: #151a24; stroke: #303746; stroke-width: 1; }
+      .selection { fill: #223047; stroke: #4b7bec; stroke-width: 1; }
+      .cursor { fill: #7dd3fc; }
+      .frame { opacity: 0; }
+      #frame-list { opacity: 1; }
+      @media (prefers-reduced-motion: reduce) {
+        .frame { opacity: 0 !important; }
+        #frame-diff { opacity: 1 !important; }
+        animate { display: none; }
+      }
+    </style>
+  </defs>
+
+  <rect width="1100" height="650" rx="18" fill="url(#bg)"/>
+  <text x="48" y="62" fill="#e6edf3" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">adotop</text>
+  <text x="48" y="92" fill="#9aa4b2" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="17">Azure DevOps pull request review from the terminal - demo data only</text>
+
+  <g transform="translate(48 122)">
+    <rect class="window" width="1004" height="480" rx="14"/>
+    <rect class="topbar" width="1004" height="48" rx="14"/>
+    <rect class="topbar" y="30" width="1004" height="22"/>
+    <circle class="dot-red" cx="28" cy="24" r="7"/>
+    <circle class="dot-yellow" cx="52" cy="24" r="7"/>
+    <circle class="dot-green" cx="76" cy="24" r="7"/>
+    <text class="chrome-text" x="116" y="30">adotop - fabrikam/platform</text>
+
+    <g id="frame-list" class="frame">
+      <animate attributeName="opacity" values="1;1;0;0;0;0;1" keyTimes="0;0.22;0.27;0.48;0.73;0.95;1" dur="12s" repeatCount="indefinite"/>
+      <rect class="panel" x="24" y="70" width="956" height="372" rx="8"/>
+      <text class="term accent" x="48" y="105">Recents (12)   Assigned (3)   Created (1)   Reviewing (8)</text>
+      <text class="term dim" x="48" y="145">ID        State    Title                              Author        Source</text>
+      <text class="term" x="48" y="188">#1151413  OPEN     Fix BuildId collision under load   Alice A.      fix/build-id</text>
+      <rect class="selection" x="40" y="205" width="920" height="38" rx="6"/>
+      <text class="term green" x="54" y="230">&gt; #1145087  READY    April release prep                 Bob B.        release/apr</text>
+      <text class="term" x="48" y="273">#1140193  MERGED   Bump dependency                    Dependabot    security/npm</text>
+      <text class="term" x="48" y="316">#1139821  ACTIVE   Add retry around upload            Carol C.      retry-upload</text>
+      <text class="term muted" x="48" y="405">/ filter    # goto-pr    enter open    o browser    ? help</text>
+      <rect class="cursor" x="424" y="214" width="9" height="20" rx="2">
+        <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+
+    <g id="frame-detail" class="frame">
+      <animate attributeName="opacity" values="0;0;1;1;0;0;0" keyTimes="0;0.24;0.29;0.47;0.52;1;1" dur="12s" repeatCount="indefinite"/>
+      <rect class="panel" x="24" y="70" width="956" height="372" rx="8"/>
+      <text class="term accent" x="48" y="105">PR #1145087  April release prep                                      READY</text>
+      <text class="term dim" x="48" y="137">fabrikam/payments-api  -  Bob Brown  -  release/apr -&gt; main</text>
+      <text class="term yellow" x="48" y="169">My vote: Approved - stale, re-approve needed</text>
+      <text class="term" x="48" y="201">Reviewers: OK Alice A. (you)  - Carol C.  - Required Reviewers</text>
+      <text class="term" x="48" y="246">Files</text>
+      <text class="term purple" x="80" y="283">[Discussion (2)]</text>
+      <text class="term dim" x="80" y="319">src/api/</text>
+      <rect class="selection" x="72" y="333" width="690" height="34" rx="6"/>
+      <text class="term green" x="88" y="357">&gt; edit  session.go        [1 comment]</text>
+      <text class="term" x="88" y="394">  edit  handlers.go       [2 comments]</text>
+      <text class="term muted" x="48" y="430">tab focus    enter diff    space expand    n/N file    M commits</text>
+    </g>
+
+    <g id="frame-diff" class="frame">
+      <animate attributeName="opacity" values="0;0;0;1;1;0;0" keyTimes="0;0.46;0.51;0.56;0.72;0.77;1" dur="12s" repeatCount="indefinite"/>
+      <rect class="panel" x="24" y="70" width="956" height="372" rx="8"/>
+      <text class="term accent" x="48" y="105">session.go</text>
+      <text class="term dim" x="48" y="143">@@ -42,8 +42,12 @@ func (s *Session) Refresh(ctx context.Context) error {</text>
+      <text class="term" x="76" y="179">if s.expiresAt.Before(time.Now()) {</text>
+      <text class="term" x="104" y="211">return ErrExpired</text>
+      <text class="term" x="76" y="243">}</text>
+      <text class="term red" x="48" y="275">-    s.token = newToken</text>
+      <text class="term green" x="48" y="307">+    s.token = newToken</text>
+      <text class="term green" x="48" y="339">+    s.refreshedAt = time.Now()</text>
+      <text class="term purple" x="76" y="374">|- ACTIVE  Ln 45  Carol C.: Should expiresAt move too?</text>
+      <text class="term muted" x="48" y="430">[/] thread    space expand    c new    C reply    x resolve</text>
+    </g>
+
+    <g id="frame-approve" class="frame">
+      <animate attributeName="opacity" values="0;0;0;0;1;1;0" keyTimes="0;0.71;0.76;0.77;0.82;0.94;1" dur="12s" repeatCount="indefinite"/>
+      <rect class="panel" x="24" y="70" width="956" height="372" rx="8"/>
+      <text class="term accent" x="48" y="105">PR #1145087  April release prep                                      READY</text>
+      <text class="term dim" x="48" y="145">fabrikam/payments-api  -  Bob Brown  -  release/apr -&gt; main</text>
+      <text class="term" x="48" y="190">Status: 4 OK</text>
+      <text class="term" x="48" y="230">Reviewers: Alice A. (you), Carol C., Required Reviewers</text>
+      <rect x="300" y="265" width="404" height="116" rx="10" fill="#1f2937" stroke="#4b5563"/>
+      <text class="term green" x="344" y="310">Approve pull request?</text>
+      <text class="term dim" x="344" y="346">a approve    esc cancel</text>
+      <text class="term green" x="48" y="430">Approved. Returning to review queue...</text>
+    </g>
+  </g>
+</svg>
