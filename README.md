@@ -13,8 +13,6 @@ to review threads, and approving changes from the keyboard. It is built for
 developers who spend their day in terminals but still need to work in Azure
 DevOps.
 
-![Sanitized adotop terminal demo](assets/adotop-demo.svg)
-
 ## Install
 
 ### Windows (Scoop)
