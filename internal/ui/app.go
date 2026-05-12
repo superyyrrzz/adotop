@@ -57,14 +57,14 @@ type Model struct {
 	// footerOK is the sticky neutral banner for write-action successes
 	// ("PR #N abandoned"). Cleared on next keypress; no dismiss cue
 	// because success is informational, not blocking.
-	footerOK string
-	showHelp      bool
-	useDelta      bool
-	previewReqID  int
-	previewKey    string
-	detailFocus   detailFocus
-	scrollMem     map[string]int
-	previewCache  *diffBodyCache
+	footerOK     string
+	showHelp     bool
+	useDelta     bool
+	previewReqID int
+	previewKey   string
+	detailFocus  detailFocus
+	scrollMem    map[string]int
+	previewCache *diffBodyCache
 
 	pendingAction pendingAction // empty action == no prompt
 
@@ -207,17 +207,17 @@ func New(cfg config.Config, client *ado.Client) Model {
 	applyDiffTheme(th)
 	keys := DefaultKeys()
 	m := Model{
-		cfg:      cfg,
-		client:   client,
-		git:      gitlocal.New(cfg.RepoRoots),
-		keys:     keys,
-		list:          NewList(keys),
-		detail:        NewDetail(keys),
-		preview:       NewDiff(keys),
-		user:          "loading…",
-		useDelta:      gitlocal.HasDelta(),
-		scrollMem:     map[string]int{},
-		previewCache:  newDiffBodyCache(5),
+		cfg:            cfg,
+		client:         client,
+		git:            gitlocal.New(cfg.RepoRoots),
+		keys:           keys,
+		list:           NewList(keys),
+		detail:         NewDetail(keys),
+		preview:        NewDiff(keys),
+		user:           "loading…",
+		useDelta:       gitlocal.HasDelta(),
+		scrollMem:      map[string]int{},
+		previewCache:   newDiffBodyCache(5),
 		expandedThread: map[int]bool{},
 		threadCursor:   map[string]int{},
 		prThreadCursor: -1,
@@ -314,6 +314,8 @@ func (m Model) loadList(tab ado.Tab) tea.Cmd {
 		var prs []ado.PRSummary
 		if m.cache != nil {
 			prs, _ = m.cache.LoadRecents()
+		} else {
+			prs = append([]ado.PRSummary(nil), m.list.prs[ado.TabRecents]...)
 		}
 		prs = sortRecentsByStatus(prs)
 		return func() tea.Msg {
@@ -1381,7 +1383,6 @@ func (m Model) View() string {
 	return strings.Join([]string{header, "", body, "", footer}, "\n")
 }
 
-
 // cycleDiffCtx advances (or rewinds) the diff context level and reloads
 // the preview at the new level. Each level has its own cache slot, so
 // flipping back to a previously-visited level is instant.
@@ -2075,6 +2076,21 @@ func Run(cfg config.Config, client *ado.Client, initialPRID int) error {
 	if initialPRID != 0 {
 		m.loadingPRModal = initialPRID
 	}
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	_, err := p.Run()
+	return err
+}
+
+// RunDemo starts the normal TUI against preloaded fixture rows. It is used by
+// `adotop demo` so recordings exercise the real render/update path without
+// requiring Azure DevOps credentials or leaking tenant data.
+func RunDemo(cfg config.Config, client *ado.Client, prs []ado.PRSummary) error {
+	m := New(cfg, client)
+	m.cache = nil
+	m.user = "Alice Anderson"
+	m.myID = "user-alice"
+	m.detail = m.detail.SetMyID(m.myID)
+	m.list, _ = m.list.Update(prsLoadedMsg{tab: ado.TabRecents, prs: prs})
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	return err

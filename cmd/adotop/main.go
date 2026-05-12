@@ -15,6 +15,7 @@ import (
 	"github.com/superyyrrzz/adotop/internal/ado"
 	"github.com/superyyrrzz/adotop/internal/applog"
 	"github.com/superyyrrzz/adotop/internal/config"
+	"github.com/superyyrrzz/adotop/internal/demo"
 	"github.com/superyyrrzz/adotop/internal/ui"
 )
 
@@ -68,6 +69,12 @@ func run() error {
 	// falls through to the normal TUI launch path.
 	if len(os.Args) >= 2 && os.Args[1] == "init" {
 		return runInit()
+	}
+	if len(os.Args) >= 2 && os.Args[1] == "demo" {
+		if len(os.Args) >= 3 && os.Args[2] == "--frames" {
+			return ui.WriteDemoFrames(os.Stdout, demo.Config(), demo.InitialPRs())
+		}
+		return runDemo()
 	}
 
 	cfg, cfgPath, err := config.Load()
@@ -133,6 +140,16 @@ func run() error {
 	return ui.Run(cfg, client, prID)
 }
 
+func runDemo() error {
+	logPath, closeLog, err := applog.Init(slog.LevelInfo)
+	if err != nil {
+		return fmt.Errorf("init log: %w", err)
+	}
+	defer closeLog()
+	slog.Info("adotop demo starting", "log", logPath)
+	return ui.RunDemo(demo.Config(), demo.NewClient(), demo.InitialPRs())
+}
+
 // printAuthError translates a token-fetch failure into an actionable
 // message on stderr. Sentinel errors get bespoke text; anything else
 // falls through to the raw error so we don't hide unexpected failures.
@@ -162,6 +179,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  adotop <pr-id>                   Open a specific PR by ID")
 	fmt.Fprintln(w, "  adotop <pr-url>                  Open a PR by Azure DevOps URL")
 	fmt.Fprintln(w, "  adotop init                      Write or update ~/.adotop/config.toml")
+	fmt.Fprintln(w, "  adotop demo                      Launch a sanitized local demo")
 	fmt.Fprintln(w, "  adotop --version                 Print version, commit, build date")
 	fmt.Fprintln(w, "  adotop --help                    This message")
 	fmt.Fprintln(w)
