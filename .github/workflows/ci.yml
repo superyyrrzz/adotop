@@ -3,6 +3,13 @@ on:
   push:
     branches: [main]
   pull_request:
+
+# CI only reads the repo — no commits, no releases, no comments.
+# Declared explicitly so CodeQL's least-privilege check is satisfied
+# and so a future repo-default change can't accidentally grant write.
+permissions:
+  contents: read
+
 jobs:
   build-test:
     strategy:
