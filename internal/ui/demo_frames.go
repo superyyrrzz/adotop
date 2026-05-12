@@ -63,6 +63,7 @@ func demoFrames(cfg config.Config, prs []ado.PRSummary) []string {
 	m.screen = screenDetail
 	m.detailFocus = focusFiles
 	m.preview = m.sizeDiffModel(NewDiff(m.keys), diffTargetPreview)
+	m.preview = m.preview.SetHeader(files[0].Path, "demo")
 	m.preview, _ = m.preview.Update(diffLoadedMsg{content: demoDiff(), target: diffTargetPreview})
 	m.previewKey = "demo"
 	frames = append(frames, m.View())

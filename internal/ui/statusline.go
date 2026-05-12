@@ -15,15 +15,15 @@ import (
 type statusMode int
 
 const (
-	modeNormal  statusMode = iota // neutral: routine navigation. The
+	modeNormal statusMode = iota // neutral: routine navigation. The
 	//                               mode pill is reserved for "look at
 	//                               me" states (CONFIRM/MENU/ERROR);
 	//                               NORMAL is the resting state and
 	//                               should fade into the chrome.
-	modeError                     // red:  error or footer error
-	modePending                   // yellow: confirmation prompt awaiting y/n
-	modeMenu                      // magenta: modal overlay (vote menu)
-	modeOK                        // green: write-action success banner
+	modeError   // red:  error or footer error
+	modePending // yellow: confirmation prompt awaiting y/n
+	modeMenu    // magenta: modal overlay (vote menu)
+	modeOK      // green: write-action success banner
 )
 
 func (s statusMode) label() string {
@@ -299,6 +299,9 @@ func composeStatusline(left []segment, hints [][]segment, right string, width in
 	rightW := lipgloss.Width(right)
 	gap := 2 // min gap between hints and clock
 	avail := width - lipgloss.Width(leftStr) - rightW - gap
+	if len(hints) > 0 && len(left) > 0 {
+		avail -= lipgloss.Width(statuslineDivider)
+	}
 	if avail < 0 {
 		avail = 0
 	}

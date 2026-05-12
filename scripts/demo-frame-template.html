@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html, body { margin: 0; width: 1028px; height: 540px; background: #0b0f16; }
+body { overflow: hidden; }
+canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="terminal" width="1028" height="540"></canvas>
+<script>
+const frameBytes = Uint8Array.from(atob("__FRAME_B64__"), c => c.charCodeAt(0));
+const ansi = new TextDecoder("utf-8").decode(frameBytes);
+const canvas = document.getElementById("terminal");
+const ctx = canvas.getContext("2d");
+const W = canvas.width;
+const H = canvas.height;
+const term = { x: 8, y: 8, w: 1012, h: 524, r: 8, pad: 10 };
+const cellW = 8.4;
+const cellH = 14;
+const fontSize = 14;
+const defaultFg = "#cdd6f4";
+const defaultBg = "#11111b";
+const basic = [
+  "#000000", "#cd3131", "#0dbc79", "#e5e510", "#2472c8", "#bc3fbc", "#11a8cd", "#e5e5e5",
+  "#666666", "#f14c4c", "#23d18b", "#f5f543", "#3b8eea", "#d670d6", "#29b8db", "#ffffff"
+];
+
+function ansi256(n) {
+  if (n < 16) return basic[n];
+  if (n >= 16 && n <= 231) {
+    const v = n - 16;
+    const steps = [0, 95, 135, 175, 215, 255];
+    const r = Math.floor(v / 36);
+    const g = Math.floor((v % 36) / 6);
+    const b = v % 6;
+    return "#" + [steps[r], steps[g], steps[b]].map(x => x.toString(16).padStart(2, "0")).join("");
+  }
+  const level = 8 + ((n - 232) * 10);
+  return "#" + [level, level, level].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+
+function rgb(r, g, b) {
+  return "#" + [r, g, b].map(x => Math.max(0, Math.min(255, x)).toString(16).padStart(2, "0")).join("");
+}
+
+function applyCodes(state, raw) {
+  const codes = raw === "" ? [0] : raw.split(";").map(x => parseInt(x || "0", 10));
+  for (let i = 0; i < codes.length; i++) {
+    const c = codes[i];
+    if (c === 0) { state.fg = defaultFg; state.bg = null; state.bold = false; }
+    else if (c === 1) state.bold = true;
+    else if (c === 22) state.bold = false;
+    else if (c === 39) state.fg = defaultFg;
+    else if (c === 49) state.bg = null;
+    else if (c >= 30 && c <= 37) state.fg = ansi256(c - 30);
+    else if (c >= 90 && c <= 97) state.fg = ansi256(c - 90 + 8);
+    else if (c >= 40 && c <= 47) state.bg = ansi256(c - 40);
+    else if (c >= 100 && c <= 107) state.bg = ansi256(c - 100 + 8);
+    else if (c === 38 && codes[i + 1] === 5 && i + 2 < codes.length) { state.fg = ansi256(codes[i + 2]); i += 2; }
+    else if (c === 48 && codes[i + 1] === 5 && i + 2 < codes.length) { state.bg = ansi256(codes[i + 2]); i += 2; }
+    else if (c === 38 && codes[i + 1] === 2 && i + 4 < codes.length) { state.fg = rgb(codes[i + 2], codes[i + 3], codes[i + 4]); i += 4; }
+    else if (c === 48 && codes[i + 1] === 2 && i + 4 < codes.length) { state.bg = rgb(codes[i + 2], codes[i + 3], codes[i + 4]); i += 4; }
+  }
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function textElements(s) {
+  if (typeof Intl !== "undefined" && Intl.Segmenter) {
+    return Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s), p => p.segment);
+  }
+  return Array.from(s);
+}
+
+function drawBox(ch, x, y, color) {
+  const cp = ch.codePointAt(0);
+  const heavy = cp === 0x2503 || cp === 0x2501 || cp === 0x250f || cp === 0x2513;
+  const t = heavy ? 2 : 1;
+  const cx = Math.round(x + cellW / 2);
+  const cy = Math.round(y + cellH / 2);
+  const vx = cx - Math.floor(t / 2);
+  const hy = cy - Math.floor(t / 2);
+  const left = Math.floor(x);
+  const right = Math.ceil(x + cellW);
+  const top = Math.floor(y) - 1;
+  const bottom = Math.ceil(y + cellH) + 1;
+
+  ctx.fillStyle = color;
+  const v = (from, to) => ctx.fillRect(vx, Math.floor(from), t, Math.ceil(to - from));
+  const h = (from, to) => ctx.fillRect(Math.floor(from), hy, Math.ceil(to - from), t);
+
+  if (cp === 0x2502 || cp === 0x2503) v(top, bottom);
+  else if (cp === 0x2500 || cp === 0x2501) h(left, right);
+  else if (cp === 0x256d || cp === 0x250f) { v(cy, bottom); h(cx, right); }
+  else if (cp === 0x256e || cp === 0x2513) { h(left, cx + t); v(cy, bottom); }
+  else if (cp === 0x2570) { v(top, cy + t); h(cx, right); }
+  else if (cp === 0x256f) { h(left, cx + t); v(top, cy + t); }
+  else { return false; }
+  return true;
+}
+
+function drawCell(ch, col, row, state) {
+  const x = term.x + term.pad + col * cellW;
+  const y = term.y + term.pad + row * cellH;
+  if (state.bg) {
+    ctx.fillStyle = state.bg;
+    ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(cellW), cellH);
+  }
+  if (ch === " " || ch === "") return;
+  if (drawBox(ch, x, y, state.fg)) return;
+  const cp = ch.codePointAt(0);
+  if (cp === 0x258c) { ctx.fillStyle = state.fg; ctx.fillRect(Math.floor(x), y, Math.ceil(cellW / 2), cellH); return; }
+  if (cp === 0x258f) { ctx.fillStyle = state.fg; ctx.fillRect(Math.floor(x), y, 2, cellH); return; }
+  ctx.fillStyle = state.fg;
+  ctx.font = (state.bold ? "700 " : "400 ") + fontSize + "px Cascadia Mono, Consolas, monospace";
+  ctx.textBaseline = "top";
+  ctx.fillText(ch, x, y - 1);
+}
+
+function drawTextSegment(segment, cursor, state) {
+  for (const ch of textElements(segment)) {
+    if (ch === "\r") continue;
+    if (ch === "\n") { cursor.row++; cursor.col = 0; continue; }
+    drawCell(ch, cursor.col, cursor.row, state);
+    cursor.col++;
+  }
+}
+
+ctx.fillStyle = "#0b0f16";
+ctx.fillRect(0, 0, W, H);
+roundRect(term.x, term.y, term.w, term.h, term.r);
+ctx.fillStyle = defaultBg;
+ctx.fill();
+ctx.strokeStyle = "#45475a";
+ctx.lineWidth = 1;
+ctx.stroke();
+
+const state = { fg: defaultFg, bg: null, bold: false };
+const cursor = { col: 0, row: 0 };
+const pattern = /\x1b\[([0-9;]*)m/g;
+let pos = 0;
+let match;
+while ((match = pattern.exec(ansi)) !== null) {
+  drawTextSegment(ansi.slice(pos, match.index), cursor, state);
+  applyCodes(state, match[1]);
+  pos = match.index + match[0].length;
+}
+drawTextSegment(ansi.slice(pos), cursor, state);
+</script>
+</body>
+</html>
+
+

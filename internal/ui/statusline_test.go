@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/superyyrrzz/adotop/internal/ado"
 	"github.com/superyyrrzz/adotop/internal/config"
@@ -168,6 +169,16 @@ func TestStatuslineMenuModeReplacesContext(t *testing.T) {
 // list-screen context segment showed "All reviewing" — long enough to
 // crowd hints off the right side at typical widths. The statusline,
 // like the topbar breadcrumb, must use Tab.Short().
+func TestStatuslineDoesNotExceedWidth(t *testing.T) {
+	m := newTestModel()
+	m.cfg = config.Config{Org: "fabrikam", Project: "Platform"}
+	m.width = 118
+
+	out := renderStatusline(m)
+	if w := lipgloss.Width(out); w > m.width {
+		t.Fatalf("statusline width=%d exceeds terminal width=%d:\n%s", w, m.width, out)
+	}
+}
 func TestStatuslineUsesShortTabLabel(t *testing.T) {
 	m := newTestModel()
 	m.cfg = config.Config{Org: "acme", Project: "Platform"}

@@ -82,92 +82,14 @@ where code work already happens.
 - **It works across teams.** Linux, macOS, and Windows are covered by CI and
   release builds.
 
-## Screenshots
+## Demo highlights
 
-### PR list
+The demo above shows the main review loop:
 
-```text
-┌── Recents (12) ── Assigned (3) ── Created (1) ── Reviewing (8) ─────────────┐
-│  ID       State    Title                          Author     Source         │
-│  #1151413 OPEN     Fix BuildId collision under …  Alice A.   fix/build-id   │
-│▸ #1145087 READY    April release prep             Bob B.     master         │
-│  #1140193 MERGED   Bump dependency                Dependabot security/      │
-│                                                                             │
-│  / filter   # goto-pr   enter open   o browser   ? help                     │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### PR detail: files focus
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ PR #1151413  Fix BuildId collision under parallel generators   OPEN         │
-│ acme/billing-service  -  Alice Anderson  -  fix/build-id -> main            │
-│ My vote: OK Approved - stale, re-approve needed                             │
-│ Reviewers: OK Bob Brown (you)  - Carol Chen  - *Required Reviewers Group    │
-│                                                                             │
-│ Description: Include BuildAction in GetBuildId() so each generator        … │
-│                                                                             │
-│ Status: 4 OK                                                                │
-│                                                                             │
-│ * Files                                                                     │
-│   [Discussion (2)]                                                          │
-│ src/auth/                                                                   │
-│     edit  login.go         [3 comments]                                     │
-│ >   edit  session.go       [1 comment]                                      │
-│     add   token_store.go                                                    │
-│ src/api/                                                                    │
-│     edit  handlers.go      [2 comments]                                     │
-│                                                                             │
-│ tab focus  enter diff  space expand  n/N file  M commits  J jump            │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Diff view with inline comment
-
-```text
-┌── session.go ───────────────────────────────────────────────────────────────┐
-│  @@ -42,8 +42,12 @@ func (s *Session) Refresh(ctx context.Context) error {  │
-│       if s.expiresAt.Before(time.Now()) {                                   │
-│           return ErrExpired                                                 │
-│       }                                                                     │
-│  -    s.token = newToken                                                    │
-│  +    s.token = newToken                                                    │
-│  +    s.refreshedAt = time.Now()                                            │
-│  |  \- ACTIVE  Ln 45  Carol Chen:                                           │
-│  |     Should we also bump expiresAt here, or is the caller responsible?    │
-│  |     [1 more - space to expand]                                           │
-│  +    return nil                                                            │
-│       }                                                                     │
-│                                                                             │
-│  [/] thread  space expand  c new  C reply  x resolve  R show-resolved       │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Help overlay
-
-```text
-┌─── Help ────────────────────────────────────────────────────────────────────┐
-│  ─ Navigation                                                               │
-│    j / k or ↓ / ↑     move cursor (wraps at edges)                          │
-│    n / N              next / prev file (Detail)                             │
-│    tab / shift+tab    switch Files ↔ Diff focus                             │
-│    enter              drill into Diff focus (from Files)                    │
-│                                                                             │
-│  ─ Threads                                                                  │
-│    [ / ]              prev / next thread                                    │
-│    space              expand thread under cursor                            │
-│    c / C              compose new comment / reply                           │
-│    x                  toggle resolve / reactivate                           │
-│                                                                             │
-│  ─ Actions                                                                  │
-│    a                  approve PR                                            │
-│    v                  open vote menu                                        │
-│    M                  view a single commit's diff                           │
-│                                                                             │
-│  ? or esc to close                                                          │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+- Move through PR queues without opening Azure DevOps in a browser.
+- Open a PR, scan changed files, status checks, reviewers, and stale vote state.
+- Read syntax-highlighted diffs with inline review threads.
+- Switch focus between the file list and diff pane, then approve or open help from the keyboard.
 
 ## Features
 

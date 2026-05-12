@@ -183,6 +183,22 @@ func TestListAllColumnsAlignAcrossVaryingInputs(t *testing.T) {
 	}
 }
 
+func TestListRowsDoNotExceedTerminalWidth(t *testing.T) {
+	now := time.Now()
+	m := NewList(DefaultKeys())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 118, Height: 34})
+	m, _ = m.Update(prsLoadedMsg{tab: ado.TabRecents, prs: []ado.PRSummary{
+		{ID: 1145087, Title: "April release prep", Author: "Bob Brown", SourceBranch: "release/apr", TargetBranch: "main", CreatedAt: now.Add(-48 * time.Hour), Reviewers: []ado.ReviewerVote{{DisplayName: "Alice", Vote: 10}, {DisplayName: "Carol", Vote: 0}, {DisplayName: "Required", Vote: 0, IsRequired: true}}},
+		{ID: 1151413, Title: "Add retry around artifact upload", Author: "Carol Chen", SourceBranch: "retry-upload", TargetBranch: "main", CreatedAt: now.Add(-48 * time.Hour), Reviewers: []ado.ReviewerVote{{DisplayName: "Alice", Vote: 0}, {DisplayName: "Bob", Vote: 5}}},
+	}})
+
+	out := m.View()
+	for i, line := range strings.Split(out, "\n") {
+		if w := runewidth.StringWidth(ansi.Strip(line)); w > 118 {
+			t.Fatalf("line %d width=%d exceeds terminal width 118:\n%s\n\nfull output:\n%s", i+1, w, ansi.Strip(line), ansi.Strip(out))
+		}
+	}
+}
 func TestListDraftBadgeAlignsAcrossAges(t *testing.T) {
 	now := time.Now()
 	m := NewList(DefaultKeys())

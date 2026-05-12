@@ -64,10 +64,10 @@ func (m ListModel) Tab() ado.Tab { return m.tab }
 //   - blank between body and footer      = 1
 //   - statusline                         = 1
 //   - "[start-end of total]" pager line  = 1 (only when scrolling, but
-//                                            we always reserve it so the
-//                                            pager doesn't shove rows
-//                                            out of view at the moment
-//                                            it appears)
+//     we always reserve it so the
+//     pager doesn't shove rows
+//     out of view at the moment
+//     it appears)
 //
 // Total chrome = 9. Underestimating chrome scrolls the topbar and
 // tab strip off the top of the alt-screen, which is how the "topbar
@@ -515,9 +515,9 @@ func (m ListModel) colWidths() listCols {
 	if m.width <= 0 {
 		return c
 	}
-	// Account for the literal separators in the row format string:
-	// "%s %s %s %s → %s   %s" -> 1+1+1+3+3 = 9 chars of glue. Use 10 for safety.
-	const glue = 10
+	// Account for rowIndent, the fixed State column, and the literal separators
+	// in the row format string: "%s %s %s %s → %s   %s" -> 1+1+1+1+3+3 = 10.
+	const glue = len(rowIndent) + stateColWidth + 10
 	const minTitle = 20
 	avail := m.width - (c.id + c.author + c.source + c.target + c.age + glue)
 	if avail < minTitle {
