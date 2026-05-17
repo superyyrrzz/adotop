@@ -87,15 +87,18 @@ func runInitWith(in io.Reader, out io.Writer) error {
 		hint:    fmt.Sprintf("Find yours at https://dev.azure.com/%s/.", org),
 		current: cur.Project,
 	})
+	repoRoots := promptOptionalList(r, out, fieldSpec{
+		label:   "Local code roots (optional)",
+		hint:    "Comma-separated dirs adotop scans for local clones, e.g. ~/git, ~/work.",
+		current: strings.Join(cur.RepoRoots, ", "),
+	})
 
 	cfg := config.Default()
 	cfg.Org = org
 	cfg.Project = project
-	// Preserve any non-default fields the user already had — repo_roots,
-	// custom keybindings, the live-test PR ID. init shouldn't wipe
-	// state the prompts didn't ask about.
-	cfg.RepoRoots = cur.RepoRoots
-	cfg.Keybindings = cur.Keybindings
+	cfg.RepoRoots = repoRoots
+	// Preserve the live-test PR ID — init shouldn't wipe state the
+	// prompts didn't ask about.
 	cfg.PRIDForLiveTest = cur.PRIDForLiveTest
 
 	written, err := config.Write(cfg)
@@ -141,6 +144,40 @@ func promptField(r *bufio.Reader, out io.Writer, f fieldSpec) string {
 		}
 		fmt.Fprintln(out, "  "+initHint.Render("(required — try again)"))
 	}
+}
+
+// promptOptionalList renders an optional field whose answer is a
+// comma-separated list. Bare enter accepts the current value (which
+// may be empty — empty list is a legitimate answer here, unlike
+// org/project where empty re-asks).
+func promptOptionalList(r *bufio.Reader, out io.Writer, f fieldSpec) []string {
+	fmt.Fprintln(out, "  "+initLabel.Render(f.label))
+	fmt.Fprintln(out, "  "+initHint.Render("└─ "+f.hint))
+	prompt := "  " + initChevron.Render("›") + " "
+	if f.current != "" {
+		prompt += fmt.Sprintf("[%s]: ", f.current)
+	} else {
+		prompt += "(leave blank for none): "
+	}
+	ans := strings.TrimSpace(promptLine(r, out, prompt))
+	fmt.Fprintln(out)
+	if ans == "" {
+		ans = f.current
+	}
+	if ans == "" {
+		return nil
+	}
+	parts := strings.Split(ans, ",")
+	out2 := parts[:0]
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out2 = append(out2, t)
+		}
+	}
+	if len(out2) == 0 {
+		return nil
+	}
+	return out2
 }
 
 // promptLine writes the question and reads one line of input from
