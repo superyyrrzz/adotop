@@ -11,6 +11,7 @@ type KeyMap struct {
 	Filter                key.Binding
 	Help, Quit            key.Binding
 	QuitForce             key.Binding
+	Settings              key.Binding
 	PgUp, PgDn            key.Binding
 	GotoTop, GotoEnd      key.Binding
 	NextFile, PrevFile    key.Binding
@@ -53,6 +54,7 @@ func DefaultKeys() KeyMap {
 		Help:       key.NewBinding(key.WithKeys("?")),
 		Quit:       key.NewBinding(key.WithKeys("q")),
 		QuitForce:  key.NewBinding(key.WithKeys("ctrl+c")),
+		Settings:   key.NewBinding(key.WithKeys(",")),
 		PgUp:       key.NewBinding(key.WithKeys("pgup")),
 		PgDn:       key.NewBinding(key.WithKeys("pgdown")),
 		GotoTop:    key.NewBinding(key.WithKeys("g")),

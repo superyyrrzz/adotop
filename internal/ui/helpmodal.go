@@ -81,6 +81,7 @@ func helpSections() []helpSection {
 			entries: []helpEntry{
 				{"o", "open current PR in browser"},
 				{"r", "refresh current screen"},
+				{",", "show settings (read-only)"},
 				{"?", "toggle this help"},
 				{"esc", "back / close modal"},
 				{"q", "quit (list) or back (detail)"},

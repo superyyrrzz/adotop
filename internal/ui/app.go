@@ -59,6 +59,11 @@ type Model struct {
 	// because success is informational, not blocking.
 	footerOK     string
 	showHelp     bool
+	// showSettings, when true, renders a read-only modal listing the
+	// currently-loaded config values and the path they came from.
+	// Toggled by the Settings key (`,`). Edits still go through
+	// `adotop init` or the TOML file directly.
+	showSettings bool
 	useDelta     bool
 	previewReqID int
 	previewKey   string
@@ -900,6 +905,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if keyMatches(msg, m.keys.Settings) {
+			m.showSettings = !m.showSettings
+			return m, nil
+		}
+		if m.showSettings {
+			if msg.Type == tea.KeyEsc {
+				m.showSettings = false
+			}
+			return m, nil
+		}
 		switch m.screen {
 		case screenList:
 			return m.updateListScreen(msg)
@@ -1367,6 +1382,14 @@ func (m Model) View() string {
 			bodyH = 24
 		}
 		body = overlayBox(body, renderHelpModal(m.width), m.width, bodyH)
+	}
+	if m.showSettings {
+		bodyH := m.height - lipgloss.Height(header) - lipgloss.Height(footer) - 2
+		if bodyH < 3 {
+			bodyH = 24
+		}
+		path, _ := config.Path()
+		body = overlayBox(body, renderSettingsModal(m.cfg, path, m.width), m.width, bodyH)
 	}
 	// Pad the body so the footer sticks to the bottom of the terminal,
 	// regardless of how much content the current screen produced.
