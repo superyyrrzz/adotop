@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -50,6 +51,17 @@ type DetailModel struct {
 	// Model; we only read it during renderHeader. Anchored threads are
 	// rendered separately under the file's diff and live on Model.
 	prThreads []ado.Thread
+	// loadedAt is the wall-clock time the current detail snapshot
+	// landed. Drives the "fetched Ns ago" line in renderHeader so the
+	// reviewer knows whether they're reading something five seconds
+	// old or twenty minutes old (the tabs auto-refresh, the PR detail
+	// doesn't). Zero when no detail has loaded yet.
+	loadedAt time.Time
+	// loadedFromCache records whether the current snapshot came from
+	// the local cache (vs. a live ADO fetch). Pairs with loadedAt so
+	// the freshness line distinguishes "fetched now from server" from
+	// "loaded from N-minute-old disk cache."
+	loadedFromCache bool
 	// fileThreadCounts maps file path -> count of (filtered) threads
 	// anchored to that file. Populated by SetPRThreads from the same
 	// thread list, so the badge in the file list reflects the same
@@ -223,6 +235,16 @@ func (m DetailModel) SelectDiscussion() DetailModel {
 func (m DetailModel) Summary() ado.PRSummary { return m.summary }
 func (m DetailModel) Detail() *ado.PRDetail  { return m.detail }
 
+// LoadedAt returns the wall-clock time the current detail snapshot
+// landed, or the zero time if no detail has loaded yet. Read by the
+// statusline to render the freshness chip.
+func (m DetailModel) LoadedAt() time.Time { return m.loadedAt }
+
+// LoadedFromCache reports whether the current snapshot came from the
+// local disk cache. Pairs with LoadedAt so the chip can distinguish
+// "fetched live N seconds ago" from "loaded from cache N minutes ago."
+func (m DetailModel) LoadedFromCache() bool { return m.loadedFromCache }
+
 func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -233,6 +255,8 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 			m.loadErr = msg.err.Error()
 		} else {
 			m.detail = msg.detail
+			m.loadedAt = time.Now()
+			m.loadedFromCache = msg.fromCache
 			// Refresh the summary too — reviewer votes and merge status can
 			// change between PR-open and now (someone approves while you're
 			// reading), and the header reads m.summary not m.detail. Without

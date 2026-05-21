@@ -163,6 +163,9 @@ func contextSegments(m Model) []segment {
 			segs = append(segs, segment{text: label, style: contextStyle().Foreground(Cursor.GetForeground()).Bold(true)})
 		}
 		segs = append(segs, segment{text: ctxLabel(m.diffCtx), style: hintStyle()})
+		if chip := freshnessSegment(m.detail.LoadedAt(), m.detail.LoadedFromCache()); chip != nil {
+			segs = append(segs, *chip)
+		}
 		// Surface the cache-revalidation indicator so the user knows the
 		// screen they're looking at is being verified against the server.
 		// The detailInflight counter ticks down as each of the four
@@ -409,6 +412,66 @@ func contextStyle() lipgloss.Style {
 // already uses the same bg.
 func errorContextStyle() lipgloss.Style {
 	return PillBad
+}
+
+// freshnessSegment returns the colored-dot chip that tells the user
+// how old the PR snapshot they're reading is. The dot color escalates
+// with age so a glance at the statusline answers "is this stale?"
+// without parsing the number:
+//
+//	green  · live, under a minute old   — trust it
+//	yellow · live, 1–5 minutes old      — probably fine, R to be sure
+//	red    · live, 5+ minutes old       — likely behind the server
+//	faint  · loaded from disk cache     — never re-fetched this session
+//
+// Returns nil when nothing has loaded yet so callers can append-or-skip
+// without a placeholder segment cluttering the line. The age text is
+// short (just-now / 12s / 5m / 2h) — coarser than the body-line version
+// because the statusline has less real estate.
+func freshnessSegment(at time.Time, fromCache bool) *segment {
+	if at.IsZero() {
+		return nil
+	}
+	age := time.Since(at)
+	dotStyle := Approve // green by default
+	switch {
+	case fromCache:
+		dotStyle = Faint
+	case age >= 5*time.Minute:
+		dotStyle = Reject
+	case age >= time.Minute:
+		dotStyle = Wait
+	}
+	var when string
+	switch {
+	case age < 5*time.Second:
+		when = "just now"
+	case age < time.Minute:
+		when = fmt.Sprintf("%ds", int(age.Seconds()))
+	case age < time.Hour:
+		when = fmt.Sprintf("%dm", int(age.Minutes()))
+	default:
+		when = fmt.Sprintf("%dh", int(age.Hours()))
+	}
+	label := when
+	if fromCache {
+		label = when + " (cache)"
+	}
+	// joinSegments wraps the text in " "+text+" " and applies one
+	// style to the whole thing — so we can't easily mix two colors
+	// inside a segment. Pre-render the dot with its color and the
+	// label with the hint style, then hand the composed string to a
+	// segment whose style is a no-op passthrough.
+	text := dotStyle.Render("●") + hintStyle().Render(" "+label)
+	return &segment{text: text, style: passthroughStyle()}
+}
+
+// passthroughStyle is a no-op lipgloss.Style — applying it doesn't
+// add color or attributes. Used when a segment's `text` is already
+// pre-styled (e.g. mixed colors inside one cell) and we just need it
+// to flow through joinSegments without being overpainted.
+func passthroughStyle() lipgloss.Style {
+	return lipgloss.NewStyle()
 }
 
 // wrapHint returns the diff-wrap toggle label, with a state suffix so
