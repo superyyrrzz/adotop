@@ -18,6 +18,11 @@ type diffLoadedMsg struct {
 	// second Colorize pass on every j/k. When empty we fall back to
 	// running Colorize ourselves.
 	rendered string
+	// renderer, if non-empty, overrides the header's renderer label
+	// for this message. Used when the loader falls back from local
+	// to REST mid-flight so the user sees what actually produced the
+	// diff they're looking at, not the optimistic label set up front.
+	renderer string
 }
 
 type diffTarget int
@@ -71,6 +76,9 @@ func (m DiffModel) Update(msg tea.Msg) (DiffModel, tea.Cmd) {
 		m.vp.Width = msg.Width
 		m.vp.Height = msg.Height - 4
 	case diffLoadedMsg:
+		if msg.renderer != "" {
+			m.renderer = msg.renderer
+		}
 		if msg.err != nil {
 			m.loadErr = msg.err.Error()
 			m.vp.SetContent("error: " + m.loadErr)

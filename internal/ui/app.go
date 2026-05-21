@@ -548,14 +548,38 @@ func (m Model) loadDiff(target diffTarget, current DiffModel, requestID int, s a
 	}
 	dm := m.sizeDiffModel(current.SetHeader(file.Path, renderer), target)
 	ctxN := ctxLines(m.diffCtx)
+	client := m.client
+	repoID := s.RepoID
 	cmd := func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if clonePath != "" {
 			out, err := gitlocal.Diff(ctx, clonePath, targetSha, sourceSha, strings.TrimPrefix(file.Path, "/"), m.useDelta, ctxN)
-			return diffLoadedMsg{content: out, err: err, target: target, requestID: requestID}
+			if err == nil {
+				return diffLoadedMsg{content: out, target: target, requestID: requestID}
+			}
+			// Local diff failed (almost always: clone is behind the PR's
+			// iteration SHAs). Fall back to REST so the user still sees
+			// a diff. The renderer label flips so they know the local
+			// fast-path didn't work — useful both for the "why is this
+			// slow" question and as a hint to `git fetch`.
+			slog.Warn("local diff failed; falling back to REST", "repo", s.Repo, "file", file.Path, "err", err)
+			src, tgt, rerr := client.GetFileContents(ctx, repoID, file.Path, sourceSha, targetSha)
+			if rerr != nil {
+				// REST also failed — return the original git error,
+				// which carries the actual reason (e.g. "fatal: Invalid
+				// revision range …"). That's more actionable than the
+				// REST error, which would just be the HTTP fallout.
+				return diffLoadedMsg{err: err, target: target, requestID: requestID}
+			}
+			return diffLoadedMsg{
+				content:   simpleDiff(tgt, src, file.Path, ctxN),
+				target:    target,
+				requestID: requestID,
+				renderer:  "rest (local stale)",
+			}
 		}
-		src, tgt, err := m.client.GetFileContents(ctx, s.RepoID, file.Path, sourceSha, targetSha)
+		src, tgt, err := client.GetFileContents(ctx, repoID, file.Path, sourceSha, targetSha)
 		if err != nil {
 			return diffLoadedMsg{err: err, target: target, requestID: requestID}
 		}
@@ -1558,7 +1582,21 @@ func (m Model) prefetchOne(file ado.FileChange, key, sourceSha, targetSha string
 		defer cancel()
 		if clonePath != "" {
 			out, err := gitlocal.Diff(ctx, clonePath, targetSha, sourceSha, strings.TrimPrefix(file.Path, "/"), useDelta, ctxN)
-			return prefetchLoadedMsg{key: key, content: out, err: err}
+			if err == nil {
+				return prefetchLoadedMsg{key: key, content: out}
+			}
+			// Mirror loadDiff: local-diff failure falls back to REST so
+			// the prefetch still warms the cache. If we returned the
+			// error here, the user's next selection would re-pay the
+			// full fetch latency on top of seeing the broken state.
+			if client == nil {
+				return prefetchLoadedMsg{key: key, err: err}
+			}
+			src, tgt, rerr := client.GetFileContents(ctx, repoID, file.Path, sourceSha, targetSha)
+			if rerr != nil {
+				return prefetchLoadedMsg{key: key, err: err}
+			}
+			return prefetchLoadedMsg{key: key, content: simpleDiff(tgt, src, file.Path, ctxN)}
 		}
 		if client == nil {
 			return prefetchLoadedMsg{key: key, err: nil, content: nil}

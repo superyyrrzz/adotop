@@ -48,7 +48,7 @@ func Diff(ctx context.Context, clonePath, targetSha, sourceSha, file string, use
 	if !useDelta {
 		out, err := gitCmd.CombinedOutput()
 		if err != nil {
-			return nil, err
+			return nil, wrapGitErr(err, out)
 		}
 		return out, nil
 	}
@@ -58,6 +58,8 @@ func Diff(ctx context.Context, clonePath, targetSha, sourceSha, file string, use
 
 	pr, pw := io.Pipe()
 	gitCmd.Stdout = pw
+	var gitStderr bytes.Buffer
+	gitCmd.Stderr = &gitStderr
 	deltaCmd := exec.CommandContext(ctx, "delta", "--paging=never")
 	deltaCmd.Stdin = pr
 	var buf bytes.Buffer
@@ -73,12 +75,33 @@ func Diff(ctx context.Context, clonePath, targetSha, sourceSha, file string, use
 	pw.Close()
 	deltaErr := deltaCmd.Wait()
 	if gitErr != nil {
-		return nil, gitErr
+		return nil, wrapGitErr(gitErr, gitStderr.Bytes())
 	}
 	if deltaErr != nil {
 		return nil, deltaErr
 	}
 	return buf.Bytes(), nil
+}
+
+// wrapGitErr augments a failed `git diff` invocation with the message
+// git actually printed. Without this, an exec.ExitError stringifies to
+// the unhelpful "exit status 128" — the user (and the caller deciding
+// whether to fall back to REST) loses every clue about what went wrong
+// (missing SHA, unknown ref, lock contention, etc.).
+func wrapGitErr(err error, output []byte) error {
+	msg := strings.TrimSpace(string(output))
+	if msg == "" {
+		return err
+	}
+	// git stderr may span multiple lines; take the first non-empty as
+	// the headline. Callers that want the full thing can still unwrap
+	// the ExitError separately if needed.
+	for _, line := range strings.Split(msg, "\n") {
+		if t := strings.TrimSpace(line); t != "" {
+			return fmt.Errorf("%w: %s", err, t)
+		}
+	}
+	return err
 }
 
 // HasDelta reports whether `delta` is on PATH.
