@@ -94,4 +94,9 @@ func applyStyles(t theme.Theme) {
 	// chroma style so + / - line content uses the same palette as the
 	// chrome around it.
 	SetSyntaxStyle(t.ChromaStyle)
+
+	// Inline-ref highlighter (@mention / !pr / #workitem) gets the same
+	// theme update so its colors stay in lockstep with the rest of the
+	// chrome on a mid-session switch.
+	applyInlineRefStyles(t)
 }

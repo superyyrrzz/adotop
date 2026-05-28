@@ -158,7 +158,7 @@ func renderCommentBody(raw string, width int, indent string) string {
 	if r == nil {
 		return wrapBodyLines(md, indent, width)
 	}
-	out, err := r.Render(md)
+	out, err := highlightInlineRefs(md, r.Render)
 	if err != nil {
 		return wrapBodyLines(md, indent, width)
 	}
