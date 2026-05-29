@@ -20,3 +20,9 @@ Thumbs.db
 # Local env
 .env
 .env.local
+
+# Claude Code workspace — developer-local permissions, prompts, and
+# nested worktrees. Never belongs in the repo: it can leak local
+# automation settings (e.g. permissive Bash allowlists) and bloats
+# history with generated binaries from .claude/worktrees/.
+/.claude/
