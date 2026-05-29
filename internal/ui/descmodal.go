@@ -107,22 +107,19 @@ func (m Model) renderDescModal() string {
 
 // descModalSize picks a comfortable box size — wide enough to read
 // prose without horizontal eye-strain, but always with margin around
-// it so the underlying screen stays visible as context.
+// it so the underlying screen stays visible as context. Height is
+// capped at termH-12 so the rendered modal (descModalSize.h plus the
+// 4-row ModalBox chrome) still fits inside overlayBox's body area
+// (termH minus the ~8-row header+footer+spacer cost). Without the
+// cap, the bottom of the modal clipped at every common terminal
+// height — bug existed since the modal was introduced; surfaced
+// during the layout-primitives refactor.
 func descModalSize(termW, termH int) (int, int) {
 	if termW <= 0 || termH <= 0 {
 		return 80, 24
 	}
-	w := termW * 4 / 5
-	h := termH * 4 / 5
-	if w > 100 {
-		w = 100
-	}
-	if w < 40 {
-		w = 40
-	}
-	if h < 10 {
-		h = 10
-	}
+	w := clamp(termW*4/5, 40, 100)
+	h := clamp(termH*4/5, 10, termH-12)
 	return w, h
 }
 
