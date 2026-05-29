@@ -1619,7 +1619,7 @@ func (m Model) detailPreviewView() string {
 		// as a discrete unit, just full-width.
 		previewBody := m.previewPaneBody()
 		previewTitle := m.previewPaneTitle()
-		right := borderedPane(previewTitle, previewBody, layout.rightWidth, maxInt(6, layout.bodyHeight/2), m.detailFocus == focusDiff)
+		right := borderedPane(previewTitle, previewBody, layout.rightWidth, max(6, layout.bodyHeight/2), m.detailFocus == focusDiff)
 		return strings.Join([]string{left, "", right}, "\n")
 	}
 	leftPane := lipgloss.NewStyle().
@@ -1696,7 +1696,7 @@ func (m Model) previewPaneBody() string {
 	layout := m.detailLayout()
 	bodyH := layout.bodyHeight
 	if !layout.split {
-		bodyH = maxInt(6, layout.bodyHeight/2)
+		bodyH = max(6, layout.bodyHeight/2)
 	}
 	innerH := bodyH - paneChromeHeight
 	if innerH <= 0 {
@@ -1819,7 +1819,7 @@ func (m Model) detailLayout() previewLayout {
 	// the alt-screen, which is how "the bar disappears" manifests on the
 	// detail screen.
 	layout := previewLayout{
-		bodyHeight: maxInt(10, m.height-5),
+		bodyHeight: max(10, m.height-5),
 		leftWidth:  80,
 		rightWidth: 80,
 	}
@@ -1832,8 +1832,8 @@ func (m Model) detailLayout() previewLayout {
 		return layout
 	}
 	left := m.width * 2 / 5
-	left = maxInt(36, minInt(left, m.width-40))
-	right := maxInt(30, m.width-left-1)
+	left = max(36, min(left, m.width-40))
+	right := max(30, m.width-left-1)
 	if right < 30 {
 		layout.leftWidth = m.width
 		layout.rightWidth = m.width
@@ -1858,30 +1858,16 @@ func (m Model) diffViewportSize(target diffTarget) (int, int) {
 		// inner padding, eating paneChromeWidth horizontally and
 		// paneChromeHeight vertically. The viewport sees the inside.
 		if layout.split {
-			return maxInt(20, layout.rightWidth-paneChromeWidth), maxInt(3, layout.bodyHeight-paneChromeHeight)
+			return max(20, layout.rightWidth-paneChromeWidth), max(3, layout.bodyHeight-paneChromeHeight)
 		}
-		return maxInt(20, layout.rightWidth-paneChromeWidth), maxInt(6, layout.bodyHeight/2-paneChromeHeight)
+		return max(20, layout.rightWidth-paneChromeWidth), max(6, layout.bodyHeight/2-paneChromeHeight)
 	default:
-		return maxInt(20, m.width), maxInt(3, m.height-5)
+		return max(20, m.width), max(3, m.height-5)
 	}
 }
 
 func diffSelectionKey(sourceSha, targetSha, path string, ctxLevel int) string {
 	return fmt.Sprintf("%s\x00%s\x00%s\x00c%d", sourceSha, targetSha, path, ctxLevel)
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func orPlaceholder(s, p string) string {

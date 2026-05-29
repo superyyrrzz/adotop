@@ -120,7 +120,7 @@ func composePaneTop(title string, width int, color lipgloss.TerminalColor) strin
 		if titleBudget < 1 {
 			t = "…"
 		} else {
-			t = t[:maxInt(1, titleBudget-1)] + "…"
+			t = t[:max(1, titleBudget-1)] + "…"
 		}
 	}
 	titled := lipgloss.NewStyle().Foreground(color).Render(lead) +

@@ -105,7 +105,7 @@ func composeCrumbs(crumbs []string, maxWidth int) string {
 	// Even the active crumb alone is too wide. Truncate it.
 	last := crumbs[len(crumbs)-1]
 	if len(last) > maxWidth {
-		last = last[:maxInt(1, maxWidth-1)] + "…"
+		last = last[:max(1, maxWidth-1)] + "…"
 	}
 	return Cursor.Render(last)
 }

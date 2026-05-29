@@ -198,21 +198,7 @@ func composeModalSize(termW, termH int) (int, int) {
 	if termW <= 0 || termH <= 0 {
 		return 80, 16
 	}
-	w := termW * 4 / 5
-	h := termH * 3 / 5
-	if w > 100 {
-		w = 100
-	}
-	if w < 40 {
-		w = 40
-	}
-	if h < 12 {
-		h = 12
-	}
-	if h > 24 {
-		h = 24
-	}
-	return w, h
+	return modalSize(termW, termH, 0.8, 0.6, 40, 100, 12, 24)
 }
 
 // composeModalInnerSize returns the textarea's content size after

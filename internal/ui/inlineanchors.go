@@ -157,7 +157,7 @@ func renderInlineThread(t ado.Thread, expand bool, width int, selected bool) str
 		gutter = "  " + Cursor.Render("▌") + " "
 	}
 	connector := Faint.Render("└─ ")
-	rendered := renderThread(t, expand, maxInt(20, width-len(baseIndent)-2))
+	rendered := renderThread(t, expand, max(20, width-len(baseIndent)-2))
 	lines := strings.Split(rendered, "\n")
 	var b strings.Builder
 	for idx, ln := range lines {
